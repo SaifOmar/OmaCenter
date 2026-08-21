@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "saif",
   "license": "MIT",
-  "description": "A typographic control center: Wi-Fi, Bluetooth, Tailscale, night light, do-not-disturb, mic, volume, brightness, now playing, theme, and power actions in one restrained panel.",
+  "description": "A macOS-style control center: connectivity circles, focus and night light tiles, sound and display sliders, now playing, theme, and power actions in one frosted tile grid.",
   "kinds": [
     "bar-widget"
   ],

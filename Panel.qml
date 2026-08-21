@@ -70,21 +70,36 @@ Panel {
     ? (root.connectedBluetoothCount > 0 ? "On · " + root.connectedBluetoothCount : "On")
     : "Off"
   readonly property string tailscaleStatus: {
-    if (root.tailscaleState === "On") return root.tailscaleHost !== "" ? "On · " + root.tailscaleHost : "On"
+    if (root.tailscaleState === "On") return root.tailscaleHost !== "" ? root.tailscaleHost : "On"
     if (root.tailscaleState === "Login") return "Login"
     return "Off"
   }
   readonly property string micStatus: root.micMuted ? "Muted" : "Live"
   readonly property string nightlightStatus: root.nightlightEnabled ? "On" : "Off"
-  readonly property string dndStatus: root.dndEnabled ? "Silenced" : "On"
+  readonly property string dndStatus: root.dndEnabled ? "On" : "Off"
+
+  // Contrast: pick black or white text/icons depending on the fill's luminance,
+  // so active (accent-filled) states stay readable on light and dark themes.
+  function luminance(c) {
+    var s = c.toString()
+    var r = parseInt(s.substring(3, 5), 16) / 255
+    var g = parseInt(s.substring(5, 7), 16) / 255
+    var b = parseInt(s.substring(7, 9), 16) / 255
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+
+  function onAccent(c) {
+    return root.luminance(c) > 0.45 ? "#000000" : "#ffffff"
+  }
 
   // ----------------------------------------------------------------------
-  // Keyboard cursor: a flat list of focusable targets. j/k walk the list,
-  // h/l adjust sliders or move along horizontal runs (media, power).
+  // Keyboard cursor: a flat list of focusable targets following the visual
+  // order of the grid. j/k walk the list, h/l adjust sliders or move along
+  // horizontal runs (connectivity, media, power).
   // ----------------------------------------------------------------------
 
   readonly property var targets: {
-    var t = ["wifi", "bluetooth", "tailscale", "nightlight", "dnd", "mic", "volume", "brightness"]
+    var t = ["wifi", "bluetooth", "tailscale", "mic", "dnd", "nightlight", "volume", "brightness"]
     if (root.hasMedia) t = t.concat(["mprev", "mplay", "mnext"])
     t = t.concat(["theme", "lock", "sleep", "reboot", "shutdown"])
     return t
@@ -121,6 +136,9 @@ Panel {
       adjustVolume(dx > 0 ? 1 : -1)
     } else if (target === "brightness") {
       adjustBrightness(dx > 0 ? 1 : -1)
+    } else if (target === "wifi" || target === "bluetooth" || target === "tailscale" || target === "mic") {
+      var cIdx = root.targets.indexOf("wifi")
+      root.cursorIndex = cIdx + Math.max(0, Math.min(3, root.cursorIndex - cIdx + dx))
     } else if (target === "mprev" || target === "mplay" || target === "mnext") {
       var mIdx = root.targets.indexOf("mprev")
       if (mIdx >= 0) {
@@ -144,9 +162,9 @@ Panel {
     if (target === "wifi") toggleWifi()
     else if (target === "bluetooth") toggleBluetooth()
     else if (target === "tailscale") toggleTailscale()
-    else if (target === "nightlight") toggleNightlight()
-    else if (target === "dnd") toggleDnd()
     else if (target === "mic") toggleMic()
+    else if (target === "dnd") toggleDnd()
+    else if (target === "nightlight") toggleNightlight()
     else if (target === "mprev") mediaPrevious()
     else if (target === "mplay") togglePlayPause()
     else if (target === "mnext") mediaNext()
@@ -381,7 +399,7 @@ Panel {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        spacing: Style.space(16)
+        spacing: Style.space(10)
 
         // ---------- Header ----------
         RowLayout {
@@ -389,7 +407,6 @@ Panel {
           spacing: Style.space(12)
 
           Text {
-            id: headerTitle
             text: "Control Center"
             color: root.fg
             font.family: root.bar ? root.bar.fontFamily : Style.font.family
@@ -409,285 +426,275 @@ Panel {
           }
         }
 
-        PanelSeparator {
+        // ---------- Top grid: connectivity module + focus/night light ----------
+        Row {
           width: parent.width
-          foreground: root.fg
-        }
+          spacing: Style.space(8)
 
-        // ---------- Quick controls ----------
-        Column {
-          width: parent.width
-          spacing: Style.spacing.sm
+          readonly property real halfWidth: (width - spacing) / 2
+          readonly property int moduleHeight: Style.space(138)
 
-          ToggleRow {
-            label: "Wi-Fi"
-            status: root.wifiStatus
-            checked: root.wifiEnabled
-            hasCursor: root.hasCursor("wifi")
-            onHovered: function(h) { if (h) root.setCursor("wifi") }
-            onClicked: root.toggleWifi()
-          }
-          ToggleRow {
-            label: "Bluetooth"
-            status: root.bluetoothStatus
-            checked: root.bluetoothEnabled
-            hasCursor: root.hasCursor("bluetooth")
-            onHovered: function(h) { if (h) root.setCursor("bluetooth") }
-            onClicked: root.toggleBluetooth()
-          }
-          ToggleRow {
-            label: "Tailscale"
-            status: root.tailscaleStatus
-            checked: root.tailscaleState === "On"
-            hasCursor: root.hasCursor("tailscale")
-            onHovered: function(h) { if (h) root.setCursor("tailscale") }
-            onClicked: root.toggleTailscale()
-          }
-          ToggleRow {
-            label: "Night Light"
-            status: root.nightlightStatus
-            checked: root.nightlightEnabled
-            hasCursor: root.hasCursor("nightlight")
-            onHovered: function(h) { if (h) root.setCursor("nightlight") }
-            onClicked: root.toggleNightlight()
-          }
-          ToggleRow {
-            label: "Do Not Disturb"
-            status: root.dndStatus
-            checked: root.dndEnabled
-            hasCursor: root.hasCursor("dnd")
-            onHovered: function(h) { if (h) root.setCursor("dnd") }
-            onClicked: root.toggleDnd()
-          }
-          ToggleRow {
-            label: "Microphone"
-            status: root.micStatus
-            checked: !root.micMuted
-            hasCursor: root.hasCursor("mic")
-            onHovered: function(h) { if (h) root.setCursor("mic") }
-            onClicked: root.toggleMic()
-          }
-        }
+          // Connectivity: 2x2 module of circular toggles, macOS style.
+          Tile {
+            width: parent.halfWidth
+            height: parent.moduleHeight
+            hoverable: false
 
-        // ---------- Volume & brightness ----------
-        PanelSeparator {
-          width: parent.width
-          foreground: root.fg
-        }
+            Grid {
+              anchors.fill: parent
+              anchors.margins: Style.space(8)
+              columns: 2
+              rows: 2
+              spacing: Style.space(4)
 
-        Column {
-          width: parent.width
-          spacing: Style.space(14)
+              readonly property real cellWidth: (width - spacing) / 2
+              readonly property real cellHeight: (height - spacing) / 2
 
-          SliderRow {
-            label: "Volume"
-            valueText: root.outputMuted ? "muted" : Math.round(root.outputVolume * 100) + "%"
-            value: root.outputVolume
-            dimmed: root.outputMuted
-            bar: root.bar
-            hasCursor: root.hasCursor("volume")
-            onHovered: function(h) { if (h) root.setCursor("volume") }
-            onMoved: root.setOutputVolume(v)
-            onRightClicked: root.toggleMute()
-            onReleased: root.setOutputVolume(v)
-          }
-
-          SliderRow {
-            label: "Brightness"
-            valueText: root.brightnessPercent + "%"
-            value: root.brightnessAvailable ? root.brightnessPercent / 100 : 0
-            maximum: 1
-            integerSteps: true
-            bar: root.bar
-            hasCursor: root.hasCursor("brightness")
-            onHovered: function(h) { if (h) root.setCursor("brightness") }
-            onMoved: root.setBrightness(v * 100)
-            onReleased: function(v) {
-              root.setBrightness(v * 100)
-              root.showBrightnessOsd(Math.round(v * 100))
+              CircleToggle {
+                width: parent.cellWidth
+                height: parent.cellHeight
+                glyph: root.wifiEnabled ? "󰤨" : "󰤭"
+                label: root.wifiStatus
+                active: root.wifiEnabled
+                hasCursor: root.hasCursor("wifi")
+                onClicked: root.toggleWifi()
+                onHoverSignal: function(h) { if (h) root.setCursor("wifi") }
+              }
+              CircleToggle {
+                width: parent.cellWidth
+                height: parent.cellHeight
+                glyph: root.bluetoothEnabled ? "󰂯" : "󰂲"
+                label: root.bluetoothStatus
+                active: root.bluetoothEnabled
+                hasCursor: root.hasCursor("bluetooth")
+                onClicked: root.toggleBluetooth()
+                onHoverSignal: function(h) { if (h) root.setCursor("bluetooth") }
+              }
+              CircleToggle {
+                width: parent.cellWidth
+                height: parent.cellHeight
+                glyph: "󰢘"
+                label: root.tailscaleStatus
+                active: root.tailscaleState === "On"
+                hasCursor: root.hasCursor("tailscale")
+                onClicked: root.toggleTailscale()
+                onHoverSignal: function(h) { if (h) root.setCursor("tailscale") }
+              }
+              CircleToggle {
+                width: parent.cellWidth
+                height: parent.cellHeight
+                glyph: root.micMuted ? "󰍭" : "󰍬"
+                label: root.micStatus
+                active: !root.micMuted
+                hasCursor: root.hasCursor("mic")
+                onClicked: root.toggleMic()
+                onHoverSignal: function(h) { if (h) root.setCursor("mic") }
+              }
             }
           }
+
+          Column {
+            width: parent.halfWidth
+            height: parent.moduleHeight
+            spacing: Style.space(8)
+
+            IconTile {
+              width: parent.width
+              height: (parent.height - parent.spacing) / 2
+              glyph: "󰂚"
+              title: "Do Not Disturb"
+              subtitle: root.dndStatus
+              active: root.dndEnabled
+              hasCursor: root.hasCursor("dnd")
+              onClicked: root.toggleDnd()
+              onHoverSignal: function(h) { if (h) root.setCursor("dnd") }
+            }
+
+            IconTile {
+              width: parent.width
+              height: (parent.height - parent.spacing) / 2
+              glyph: "󰖔"
+              title: "Night Light"
+              subtitle: root.nightlightStatus
+              active: root.nightlightEnabled
+              hasCursor: root.hasCursor("nightlight")
+              onClicked: root.toggleNightlight()
+              onHoverSignal: function(h) { if (h) root.setCursor("nightlight") }
+            }
+          }
+        }
+
+        // ---------- Sliders ----------
+        SliderTile {
+          width: parent.width
+          height: Style.space(58)
+          glyph: root.outputMuted ? "󰝟" : "󰕾"
+          label: "Sound"
+          valueText: root.outputMuted ? "Muted" : Math.round(root.outputVolume * 100) + "%"
+          value: root.outputVolume
+          dimmed: root.outputMuted
+          hasCursor: root.hasCursor("volume")
+          onMoved: root.setOutputVolume(v)
+          onReleased: root.setOutputVolume(v)
+          onIconClicked: root.toggleMute()
+          onRightClicked: root.toggleMute()
+          onHoverSignal: function(h) { if (h) root.setCursor("volume") }
+        }
+
+        SliderTile {
+          width: parent.width
+          height: Style.space(58)
+          glyph: "󰃟"
+          label: "Display"
+          valueText: root.brightnessPercent + "%"
+          value: root.brightnessAvailable ? root.brightnessPercent / 100 : 0
+          hasCursor: root.hasCursor("brightness")
+          onMoved: root.setBrightness(v * 100)
+          onReleased: function(v) {
+            root.setBrightness(v * 100)
+            root.showBrightnessOsd(Math.round(v * 100))
+          }
+          onHoverSignal: function(h) { if (h) root.setCursor("brightness") }
         }
 
         // ---------- Now playing ----------
-        PanelSeparator {
+        Tile {
           width: parent.width
-          foreground: root.fg
-        }
+          height: Style.space(66)
 
-        Item {
-          width: parent.width
-          height: root.hasMedia ? mediaRow.implicitHeight : Style.space(30)
-
-          Column {
-            visible: !root.hasMedia
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.spacing.xs
-            Text {
-              text: "Now Playing"
-              color: Qt.darker(root.fg, 1.5)
-              font.family: root.bar ? root.bar.fontFamily : Style.font.family
-              font.pixelSize: Style.font.caption
-              font.bold: true
-              font.letterSpacing: 1.2
-            }
-            Text {
-              text: "Nothing playing"
-              color: Qt.darker(root.fg, 1.6)
-              font.family: root.bar ? root.bar.fontFamily : Style.font.family
-              font.pixelSize: Style.font.bodySmall
-              font.italic: true
-            }
-          }
-
-          RowLayout {
-            id: mediaRow
-            visible: root.hasMedia
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(12)
+            anchors.rightMargin: Style.space(12)
             spacing: Style.space(12)
 
+            Item {
+              id: mediaArt
+              width: Style.space(38)
+              height: parent.height
+
+              Rectangle {
+                anchors.centerIn: parent
+                width: Style.space(38)
+                height: width
+                radius: width / 2
+                color: Util.alpha(root.fg, 0.12)
+
+                Text {
+                  anchors.centerIn: parent
+                  text: "󰎈"
+                  color: root.fg
+                  font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                  font.pixelSize: Style.font.icon
+                }
+              }
+            }
+
             Column {
-              width: Math.max(0, parent.width - mediaButtons.implicitWidth - parent.spacing)
-              spacing: Style.spacing.xs
+              width: parent.width - mediaArt.width - mediaButtons.width - parent.spacing * 2
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
 
               Text {
-                text: root.mediaTitle
+                width: parent.width
+                text: root.hasMedia ? root.mediaTitle : "Nothing Playing"
                 color: root.fg
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
                 font.pixelSize: Style.font.subtitle
                 font.bold: true
                 elide: Text.ElideRight
-                width: parent.width
               }
 
               Text {
-                text: root.mediaArtist
+                width: parent.width
+                text: root.hasMedia ? root.mediaArtist : "—"
                 color: Qt.darker(root.fg, 1.5)
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
                 font.pixelSize: Style.font.bodySmall
                 elide: Text.ElideRight
-                width: parent.width
               }
             }
 
             Row {
               id: mediaButtons
-              Layout.alignment: Qt.AlignVCenter
-              spacing: Style.spacing.xs
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(6)
 
-              Button {
-                iconText: "󰒭"
-                iconSize: Style.font.title
-                bordered: true
+              MiniButton {
+                glyph: "󰒭"
                 hasCursor: root.hasCursor("mprev")
-                foreground: root.fg
-                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY
                 onClicked: root.mediaPrevious()
-                onHovered: function(h) { if (h) root.setCursor("mprev") }
+                onHoverSignal: function(h) { if (h) root.setCursor("mprev") }
               }
-
-              Button {
-                iconText: root.mediaPlaying ? "󰒰" : "󰒮"
-                iconSize: Style.font.title
-                bordered: true
+              MiniButton {
+                glyph: root.mediaPlaying ? "󰒰" : "󰒮"
                 hasCursor: root.hasCursor("mplay")
-                foreground: root.fg
-                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY
                 onClicked: root.togglePlayPause()
-                onHovered: function(h) { if (h) root.setCursor("mplay") }
+                onHoverSignal: function(h) { if (h) root.setCursor("mplay") }
               }
-
-              Button {
-                iconText: "󰒱"
-                iconSize: Style.font.title
-                bordered: true
+              MiniButton {
+                glyph: "󰒱"
                 hasCursor: root.hasCursor("mnext")
-                foreground: root.fg
-                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY
                 onClicked: root.mediaNext()
-                onHovered: function(h) { if (h) root.setCursor("mnext") }
+                onHoverSignal: function(h) { if (h) root.setCursor("mnext") }
               }
             }
           }
         }
 
         // ---------- Theme ----------
-        PanelSeparator {
+        IconTile {
           width: parent.width
-          foreground: root.fg
-        }
-
-        Button {
-          width: parent.width
-          text: root.themeName !== "" ? "Theme — " + root.themeName : "Theme"
-          iconText: "󰍜"
-          iconSize: Style.font.title
-          fontSize: Style.font.body
-          leftAlign: true
-          bordered: true
+          height: Style.space(56)
+          glyph: "󰏘"
+          title: root.themeName !== "" ? "Theme — " + root.themeName : "Theme"
+          subtitle: "Switch appearance"
           hasCursor: root.hasCursor("theme")
-          foreground: root.fg
-          fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-          horizontalPadding: Style.spacing.controlPaddingX
-          verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
           onClicked: root.openThemeSwitcher()
-          onHovered: function(h) { if (h) root.setCursor("theme") }
+          onHoverSignal: function(h) { if (h) root.setCursor("theme") }
         }
 
         // ---------- Power ----------
-        PanelSeparator {
+        Row {
           width: parent.width
-          foreground: root.fg
-        }
+          spacing: Style.space(8)
 
-        Column {
-          width: parent.width
-          spacing: Style.spacing.sm
+          readonly property real cellWidth: (width - spacing * 3) / 4
 
-          Row {
-            id: powerRow
-            width: parent.width
-            spacing: Style.spacing.sm
+          Repeater {
+            model: [
+              { target: "lock", label: "Lock" },
+              { target: "sleep", label: "Sleep" },
+              { target: "reboot", label: "Reboot" },
+              { target: "shutdown", label: "Shutdown" }
+            ]
 
-            readonly property real cellWidth: (width - spacing * 3) / 4
+            delegate: Tile {
+              required property var modelData
+              width: parent.cellWidth
+              height: Style.space(42)
 
-            Repeater {
-              model: ["Lock", "Sleep", "Reboot", "Shutdown"]
-              Button {
-                required property string modelData
-                required property int index
-
-                width: powerRow.cellWidth
-                text: String(modelData).toUpperCase()
-                fontSize: Style.font.bodySmall
-                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                horizontalPadding: 0
-                verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-                bordered: true
-                foreground: root.fg
-                hasCursor: root.hasCursor(["lock", "sleep", "reboot", "shutdown"][index])
-                onClicked: {
-                  if (index === 0) root.doLock()
-                  else if (index === 1) root.doSleep()
-                  else if (index === 2) root.askPower("reboot", "Restart this machine?")
-                  else root.askPower("shutdown", "Shut down this machine?")
-                }
-                onHovered: function(h) { if (h) root.setCursor(["lock", "sleep", "reboot", "shutdown"][index]) }
+              Text {
+                anchors.centerIn: parent
+                text: parent.modelData.label.toUpperCase()
+                color: parent.hot || parent.hasCursor ? root.fg : Qt.darker(root.fg, 1.3)
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+                font.letterSpacing: 0.5
               }
+
+              hasCursor: root.hasCursor(modelData.target)
+              onClicked: {
+                if (modelData.target === "lock") root.doLock()
+                else if (modelData.target === "sleep") root.doSleep()
+                else if (modelData.target === "reboot") root.askPower("reboot", "Restart this machine?")
+                else root.askPower("shutdown", "Shut down this machine?")
+              }
+              onHoverSignal: function(h) { if (h) root.setCursor(modelData.target) }
             }
           }
         }
-
-        // Bottom breathing room
-        Item { width: 1; height: Style.space(2) }
       }
 
       ConfirmDialog {
@@ -749,166 +756,279 @@ Panel {
   }
 
   // ----------------------------------------------------------------------
-  // Row components
+  // Components
   // ----------------------------------------------------------------------
 
-  component ToggleRow: Item {
-    id: row
+  // Rounded frosted tile — the base surface every control sits on.
+  component Tile: Rectangle {
+    id: tile
 
-    property string label: ""
-    property string status: ""
-    property bool checked: false
+    property bool active: false
+    property bool hoverable: true
     property bool hasCursor: false
     property color foreground: root.fg
-    property color accent: root.accent
-    property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+    property color accentColor: root.accent
 
     signal clicked
-    signal hovered(bool isHovered)
+    signal rightClicked
+    signal hoverSignal(bool isHovered)
 
-    readonly property bool hot: row.hasCursor || mouse.containsMouse
+    readonly property bool hot: hoverable && mouse.containsMouse
 
-    height: Style.space(38)
-    implicitWidth: parent ? parent.width : Style.space(240)
+    radius: Style.space(14)
+    color: active
+      ? accentColor
+      : (hot || hasCursor ? Util.alpha(foreground, 0.10) : Util.alpha(foreground, 0.055))
+    border.width: hasCursor ? Math.max(1, Style.normalBorderWidth) : 0
+    border.color: Util.alpha(foreground, 0.45)
 
-    Rectangle {
-      anchors.fill: parent
-      radius: Style.cornerRadius
-      color: row.hot ? Style.hoverFillFor(row.foreground, row.accent) : "transparent"
-
-      Behavior on color { ColorAnimation { duration: 100 } }
-    }
-
-    RowLayout {
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(12)
-      anchors.rightMargin: Style.space(8)
-      spacing: Style.space(10)
-
-      Text {
-        text: row.label
-        color: row.foreground
-        font.family: row.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-        elide: Text.ElideRight
-        Layout.fillWidth: true
-      }
-
-      Text {
-        text: row.status
-        color: Qt.darker(row.foreground, 1.5)
-        font.family: row.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        elide: Text.ElideRight
-      }
-
-      ToggleSwitch {
-        checked: row.checked
-        hasCursor: row.hasCursor
-        interactive: false
-        foreground: row.foreground
-        accent: row.accent
-      }
-    }
+    Behavior on color { ColorAnimation { duration: 120 } }
 
     MouseArea {
       id: mouse
       anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onClicked: row.clicked()
-      onContainsMouseChanged: row.hovered(containsMouse)
+      hoverEnabled: tile.hoverable
+      cursorShape: tile.hoverable ? Qt.PointingHandCursor : Qt.ArrowCursor
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: function(mouse) {
+        if (mouse.button === Qt.LeftButton) tile.clicked()
+        else tile.rightClicked()
+      }
+      onContainsMouseChanged: tile.hoverSignal(containsMouse)
     }
   }
 
-  component SliderRow: Item {
-    id: slider
+  // Circular toggle inside the connectivity module: filled circle + status label.
+  component CircleToggle: Tile {
+    id: circle
 
+    property string glyph: ""
+    property string label: ""
+
+    Column {
+      anchors.centerIn: parent
+      spacing: Style.space(3)
+
+      Rectangle {
+        width: Style.space(34)
+        height: width
+        radius: width / 2
+        anchors.horizontalCenter: parent.horizontalCenter
+        color: circle.active
+          ? circle.accentColor
+          : Util.alpha(circle.foreground, circle.hot || circle.hasCursor ? 0.22 : 0.13)
+
+        Behavior on color { ColorAnimation { duration: 120 } }
+
+        Text {
+          anchors.centerIn: parent
+          text: circle.glyph
+          color: circle.active ? root.onAccent(circle.accentColor) : circle.foreground
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.icon
+        }
+      }
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: circle.label
+        color: circle.active ? root.onAccent(circle.accentColor) : Qt.darker(circle.foreground, 1.4)
+        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        elide: Text.ElideRight
+        width: circle.width - Style.space(8)
+        horizontalAlignment: Text.AlignHCenter
+      }
+    }
+  }
+
+  // Wide tile: circular icon on the left, title + subtitle stacked beside it.
+  component IconTile: Tile {
+    id: iconTile
+
+    property string glyph: ""
+    property string title: ""
+    property string subtitle: ""
+
+    Row {
+      anchors.fill: parent
+      anchors.leftMargin: Style.space(12)
+      anchors.rightMargin: Style.space(12)
+      spacing: Style.space(12)
+
+      Rectangle {
+        width: Style.space(36)
+        height: width
+        radius: width / 2
+        anchors.verticalCenter: parent.verticalCenter
+        color: iconTile.active
+          ? root.onAccent(iconTile.accentColor)
+          : Util.alpha(iconTile.foreground, iconTile.hot || iconTile.hasCursor ? 0.22 : 0.13)
+
+        Behavior on color { ColorAnimation { duration: 120 } }
+
+        Text {
+          anchors.centerIn: parent
+          text: iconTile.glyph
+          color: iconTile.active ? iconTile.accentColor : iconTile.foreground
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.icon
+        }
+      }
+
+      Column {
+        width: parent.width - parent.spacing - Style.space(36)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(1)
+
+        Text {
+          width: parent.width
+          text: iconTile.title
+          color: iconTile.active ? root.onAccent(iconTile.accentColor) : iconTile.foreground
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.body
+          font.bold: true
+          elide: Text.ElideRight
+        }
+
+        Text {
+          width: parent.width
+          text: iconTile.subtitle
+          color: iconTile.active
+            ? Util.alpha(root.onAccent(iconTile.accentColor), 0.75)
+            : Qt.darker(iconTile.foreground, 1.5)
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+        }
+      }
+    }
+  }
+
+  // Full-width slider tile: icon (clickable secondary action) + slider.
+  component SliderTile: Tile {
+    id: sliderTile
+
+    property string glyph: ""
     property string label: ""
     property string valueText: ""
     property real value: 0
-    property real minimum: 0
-    property real maximum: 1
     property bool dimmed: false
-    property bool hasCursor: false
-    property bool integerSteps: false
-    property QtObject bar: null
-    property color foreground: root.fg
-    property color accent: root.accent
-    property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
 
     signal moved(real v)
     signal released(real v)
-    signal rightClicked
-    signal hovered(bool isHovered)
+    signal iconClicked
 
-    readonly property int labelH: Style.space(18)
-    readonly property int sliderH: Style.space(24)
-    readonly property int gap: Style.spacing.sm
-
-    height: labelH + gap + sliderH
-    implicitWidth: parent ? parent.width : Style.space(240)
-    opacity: root.dimmed ? 0.55 : 1.0
-
+    opacity: dimmed ? 0.55 : 1.0
     Behavior on opacity { NumberAnimation { duration: 120 } }
 
-    Rectangle {
+    Row {
       anchors.fill: parent
-      radius: Style.cornerRadius
-      color: slider.hasCursor ? Style.hoverFillFor(slider.foreground, slider.accent) : "transparent"
-
-      Behavior on color { ColorAnimation { duration: 100 } }
-    }
-
-    Text {
-      text: slider.label
-      anchors.left: parent.left
-      anchors.leftMargin: Style.space(12)
-      anchors.top: parent.top
-      anchors.topMargin: Style.space(2)
-      color: slider.foreground
-      font.family: slider.fontFamily
-      font.pixelSize: Style.font.bodySmall
-      font.bold: true
-    }
-
-    Text {
-      text: slider.valueText
-      anchors.right: parent.right
-      anchors.rightMargin: Style.space(12)
-      anchors.top: parent.top
-      anchors.topMargin: Style.space(2)
-      color: Qt.darker(slider.foreground, 1.5)
-      font.family: slider.fontFamily
-      font.pixelSize: Style.font.bodySmall
-      font.bold: true
-    }
-
-    PanelSlider {
-      id: sliderControl
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.bottom: parent.bottom
       anchors.leftMargin: Style.space(12)
       anchors.rightMargin: Style.space(12)
-      anchors.bottomMargin: Style.space(2)
-      bar: slider.bar
-      value: slider.value
-      minimum: slider.minimum
-      maximum: slider.maximum
-      step: slider.integerSteps ? 0.05 : 0.05
-      integer: false
+      spacing: Style.space(12)
 
-      onMoved: function(v) { slider.moved(v) }
-      onReleased: function(v) { slider.released(v) }
-      onRightClicked: slider.rightClicked()
+      Rectangle {
+        width: Style.space(34)
+        height: width
+        radius: width / 2
+        anchors.verticalCenter: parent.verticalCenter
+        color: Util.alpha(sliderTile.foreground, 0.13)
+
+        Text {
+          anchors.centerIn: parent
+          text: sliderTile.glyph
+          color: sliderTile.foreground
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.icon
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: sliderTile.iconClicked()
+        }
+      }
+
+      Column {
+        width: parent.width - parent.spacing - Style.space(34)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(3)
+
+        Row {
+          width: parent.width
+
+          Text {
+            text: sliderTile.label
+            color: sliderTile.foreground
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+
+          Text {
+            anchors.right: parent.right
+            text: sliderTile.valueText
+            color: Qt.darker(sliderTile.foreground, 1.5)
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+        }
+
+        PanelSlider {
+          width: parent.width
+          bar: root.bar
+          value: sliderTile.value
+          minimum: 0
+          maximum: 1
+          step: 0.05
+
+          onMoved: function(v) { sliderTile.moved(v) }
+          onReleased: function(v) { sliderTile.released(v) }
+          onRightClicked: sliderTile.rightClicked()
+        }
+      }
+    }
+  }
+
+  // Small circular transport button for the media tile.
+  component MiniButton: Rectangle {
+    id: mini
+
+    property string glyph: ""
+    property bool hasCursor: false
+
+    signal clicked
+    signal hoverSignal(bool isHovered)
+
+    readonly property bool hot: miniMouse.containsMouse
+
+    width: Style.space(32)
+    height: width
+    radius: width / 2
+    color: hot || hasCursor ? Util.alpha(root.fg, 0.22) : Util.alpha(root.fg, 0.13)
+    border.width: hasCursor ? Math.max(1, Style.normalBorderWidth) : 0
+    border.color: Util.alpha(root.fg, 0.45)
+
+    Behavior on color { ColorAnimation { duration: 120 } }
+
+    Text {
+      anchors.centerIn: parent
+      text: mini.glyph
+      color: root.fg
+      font.family: root.bar ? root.bar.fontFamily : Style.font.family
+      font.pixelSize: Style.font.body
     }
 
-    HoverHandler {
-      onHoveredChanged: slider.hovered(hovered)
+    MouseArea {
+      id: miniMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: mini.clicked()
+      onContainsMouseChanged: mini.hoverSignal(containsMouse)
     }
   }
 }
