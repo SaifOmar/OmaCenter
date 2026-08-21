@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Bluetooth
@@ -500,7 +501,7 @@ Panel {
               CircleToggle {
                 width: parent.cellWidth
                 height: parent.cellHeight
-                glyph: "󰢘"
+                glyph: "󰘂"
                 label: root.tailscaleStatus
                 active: root.tailscaleState === "On"
                 hasCursor: root.hasCursor("tailscale")
@@ -602,23 +603,66 @@ Panel {
 
             Item {
               id: mediaArt
-              width: Style.space(38)
+              width: Style.space(46)
               height: parent.height
 
-              Rectangle {
+              // Album art, rounded via a MultiEffect mask (the same pattern
+              // famas.media-plus uses). Falls back to a note tile when there
+              // is no artwork or it fails to load.
+              Item {
+                id: artSource
                 anchors.centerIn: parent
-                width: Style.space(38)
+                width: Style.space(42)
                 height: width
-                radius: width / 2
-                color: Util.alpha(root.fg, 0.12)
+                visible: false
+                layer.enabled: true
+                layer.smooth: true
 
-                Text {
-                  anchors.centerIn: parent
-                  text: "󰝚"
-                  color: root.fg
-                  font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                  font.pixelSize: Style.font.icon
+                Image {
+                  id: artImage
+                  anchors.fill: parent
+                  fillMode: Image.PreserveAspectCrop
+                  asynchronous: true
+                  source: root.player && root.player.trackArtUrl ? root.player.trackArtUrl : ""
                 }
+
+                Rectangle {
+                  anchors.fill: parent
+                  radius: Style.space(10)
+                  color: Util.alpha(root.fg, 0.12)
+                  visible: artImage.status !== Image.Ready
+
+                  Text {
+                    anchors.centerIn: parent
+                    text: "󰝚"
+                    color: root.fg
+                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                    font.pixelSize: Style.font.icon
+                  }
+                }
+              }
+
+              Item {
+                id: artMask
+                anchors.fill: artSource
+                visible: false
+                layer.enabled: true
+                layer.smooth: true
+
+                Rectangle {
+                  anchors.fill: parent
+                  radius: Style.space(10)
+                  color: "white"
+                }
+              }
+
+              MultiEffect {
+                anchors.fill: artSource
+                source: artSource
+                maskEnabled: true
+                maskSource: artMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
               }
             }
 
@@ -654,7 +698,7 @@ Panel {
 
               MiniButton {
                 visible: root.player ? root.player.canGoPrevious : false
-                glyph: "󰒝"
+                glyph: "󰒮"
                 hasCursor: root.hasCursor("mprev")
                 onClicked: root.mediaPrevious()
                 onHoverSignal: function(h) { if (h) root.setCursor("mprev") }
