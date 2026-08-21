@@ -1013,18 +1013,47 @@ Panel {
         }
       }
 
-      PanelSlider {
+      Item {
+        id: sliderHost
         width: parent.width
-        bar: root.bar
-        value: sliderTile.value
-        minimum: 0
-        maximum: 1
-        step: 0.05
-        tickCount: 16
+        height: sliderControl.implicitHeight
 
-        onMoved: function(v) { sliderTile.moved(v) }
-        onReleased: function(v) { sliderTile.released(v) }
-        onRightClicked: sliderTile.rightClicked()
+        PanelSlider {
+          id: sliderControl
+          anchors.fill: parent
+          bar: root.bar
+          value: sliderTile.value
+          minimum: 0
+          maximum: 1
+          step: 0.05
+
+          onMoved: function(v) { sliderTile.moved(v) }
+          onReleased: function(v) { sliderTile.released(v) }
+          onRightClicked: sliderTile.rightClicked()
+        }
+
+        // Step dots: faint markers in the unfilled portion only — the fill
+        // swallows them as it advances, and they fade out under the knob.
+        Repeater {
+          model: 9
+
+          Rectangle {
+            required property int index
+            readonly property real fraction: (index + 1) / 10
+            readonly property bool behindFill: fraction <= sliderControl.progress
+
+            width: Style.space(3)
+            height: width
+            radius: width / 2
+            anchors.verticalCenter: parent.verticalCenter
+            x: Math.max(0, Math.min(parent.width - width, parent.width * fraction - width / 2))
+            color: behindFill ? "transparent" : Util.alpha(sliderTile.foreground, 0.28)
+            opacity: Math.abs(fraction - sliderControl.progress) < 0.05 ? 0 : 1
+
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+          }
+        }
       }
     }
   }
