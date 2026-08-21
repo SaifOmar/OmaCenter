@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
@@ -60,8 +59,6 @@ Panel {
 
   property bool cursorActive: false
   property int cursorIndex: 0
-  property var pendingPowerAction: null
-  property string pendingPowerLabel: ""
 
   readonly property int panelWidth: root.setting("width", 400)
 
@@ -81,7 +78,23 @@ Panel {
   readonly property bool nightlightEnabled: nightlightService ? nightlightService.enabled : false
   readonly property bool dndEnabled: notificationService ? notificationService.doNotDisturb : false
 
-  readonly property string wifiStatus: root.wifiEnabled ? "On" : "Off"
+  // Connected Wi-Fi network name, same source Omarchy's network panel uses.
+  readonly property var wifiDevices: Networking.devices ? Networking.devices.values : []
+  readonly property string wifiSsid: {
+    for (var i = 0; i < root.wifiDevices.length; i++) {
+      var device = root.wifiDevices[i]
+      if (!device || device.type !== DeviceType.Wifi) continue
+      var networks = device.networks ? device.networks.values : []
+      for (var j = 0; j < networks.length; j++) {
+        if (networks[j] && networks[j].connected) return networks[j].ssid || ""
+      }
+    }
+    return ""
+  }
+
+  readonly property string wifiStatus: !root.wifiEnabled
+    ? "Off"
+    : (root.wifiSsid !== "" ? root.wifiSsid : "On")
   readonly property string bluetoothStatus: root.bluetoothEnabled
     ? (root.connectedBluetoothCount > 0 ? "On · " + root.connectedBluetoothCount : "On")
     : "Off"
@@ -117,7 +130,7 @@ Panel {
   readonly property var targets: {
     var t = ["wifi", "bluetooth", "tailscale", "mic", "dnd", "nightlight", "volume", "brightness"]
     if (root.hasMedia) t = t.concat(["mprev", "mplay", "mnext"])
-    t = t.concat(["theme", "lock", "sleep", "reboot", "shutdown"])
+    t = t.concat(["theme", "lock", "sleep"])
     return t
   }
 
@@ -138,7 +151,6 @@ Panel {
   }
 
   function moveCursor(dx, dy) {
-    if (root.pendingPowerAction) return
     root.cursorActive = true
 
     if (dy !== 0) {
@@ -162,18 +174,16 @@ Panel {
         var mCursor = Math.max(0, Math.min(mCount - 1, root.cursorIndex - mIdx + dx))
         root.cursorIndex = mIdx + mCursor
       }
-    } else if (target === "lock" || target === "sleep" || target === "reboot" || target === "shutdown") {
+    } else if (target === "lock" || target === "sleep") {
       var pIdx = root.targets.indexOf("lock")
       if (pIdx >= 0) {
-        var pCount = 4
-        var pCursor = Math.max(0, Math.min(pCount - 1, root.cursorIndex - pIdx + dx))
+        var pCursor = Math.max(0, Math.min(1, root.cursorIndex - pIdx + dx))
         root.cursorIndex = pIdx + pCursor
       }
     }
   }
 
   function activateCursor() {
-    if (root.pendingPowerAction) return
     var target = root.currentTarget()
     if (target === "wifi") toggleWifi()
     else if (target === "bluetooth") toggleBluetooth()
@@ -187,8 +197,6 @@ Panel {
     else if (target === "theme") openThemeSwitcher()
     else if (target === "lock") doLock()
     else if (target === "sleep") doSleep()
-    else if (target === "reboot") askPower("reboot", "Restart this machine?")
-    else if (target === "shutdown") askPower("shutdown", "Shut down this machine?")
   }
 
   // ----------------------------------------------------------------------
@@ -300,23 +308,6 @@ Panel {
     Quickshell.execDetached(["systemctl", "suspend"])
   }
 
-  function askPower(action, message) {
-    root.pendingPowerAction = action
-    root.pendingPowerLabel = message
-    confirmDialog.selectedIndex = 1
-  }
-
-  function runPendingPower() {
-    var action = root.pendingPowerAction
-    root.pendingPowerAction = null
-    if (action === "reboot") Quickshell.execDetached(["omarchy", "system", "reboot"])
-    else if (action === "shutdown") Quickshell.execDetached(["omarchy", "system", "shutdown"])
-  }
-
-  function cancelPendingPower() {
-    root.pendingPowerAction = null
-  }
-
   // ----------------------------------------------------------------------
   // Data refresh
   // ----------------------------------------------------------------------
@@ -399,25 +390,9 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onMoveRequested: function(dx, dy) {
-        if (root.pendingPowerAction) {
-          if (dx !== 0 || dy !== 0) confirmDialog.selectedIndex = 1 - confirmDialog.selectedIndex
-          return
-        }
-        root.moveCursor(dx, dy)
-      }
-      onActivateRequested: {
-        if (root.pendingPowerAction) {
-          if (confirmDialog.selectedIndex === 1) root.runPendingPower()
-          else root.cancelPendingPower()
-          return
-        }
-        root.activateCursor()
-      }
-      onCloseRequested: {
-        if (root.pendingPowerAction) root.cancelPendingPower()
-        else root.close()
-      }
+      onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
+      onActivateRequested: root.activateCursor()
+      onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       Column {
@@ -428,21 +403,13 @@ Panel {
         spacing: Style.space(10)
 
         // ---------- Header ----------
-        RowLayout {
+        Item {
           width: parent.width
-          spacing: Style.space(12)
+          height: escHint.implicitHeight
 
           Text {
-            text: "Control Center"
-            color: root.fg
-            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-            font.pixelSize: Style.font.heading
-            font.bold: true
-            elide: Text.ElideRight
-            Layout.fillWidth: true
-          }
-
-          Text {
+            id: escHint
+            anchors.right: parent.right
             text: "esc"
             color: Qt.darker(root.fg, 1.5)
             font.family: root.bar ? root.bar.fontFamily : Style.font.family
@@ -737,14 +704,12 @@ Panel {
           width: parent.width
           spacing: Style.space(8)
 
-          readonly property real cellWidth: (width - spacing * 3) / 4
+          readonly property real cellWidth: (width - spacing) / 2
 
           Repeater {
             model: [
               { target: "lock", label: "Lock" },
-              { target: "sleep", label: "Sleep" },
-              { target: "reboot", label: "Reboot" },
-              { target: "shutdown", label: "Shutdown" }
+              { target: "sleep", label: "Sleep" }
             ]
 
             delegate: Tile {
@@ -765,26 +730,13 @@ Panel {
               hasCursor: root.hasCursor(modelData.target)
               onClicked: {
                 if (modelData.target === "lock") root.doLock()
-                else if (modelData.target === "sleep") root.doSleep()
-                else if (modelData.target === "reboot") root.askPower("reboot", "Restart this machine?")
-                else root.askPower("shutdown", "Shut down this machine?")
+                else root.doSleep()
               }
+              onRightClicked: root.summonPanel("omarchy.power")
               onHoverSignal: function(h) { if (h) root.setCursor(modelData.target) }
             }
           }
         }
-      }
-
-      ConfirmDialog {
-        id: confirmDialog
-        anchors.fill: parent
-        visible: root.pendingPowerAction !== null
-        message: root.pendingPowerLabel
-        confirmText: "Confirm"
-        background: Color.popups.background
-        foreground: root.fg
-        onConfirmed: root.runPendingPower()
-        onCanceled: root.cancelPendingPower()
       }
     }
   }
@@ -1068,6 +1020,7 @@ Panel {
         minimum: 0
         maximum: 1
         step: 0.05
+        tickCount: 16
 
         onMoved: function(v) { sliderTile.moved(v) }
         onReleased: function(v) { sliderTile.released(v) }
