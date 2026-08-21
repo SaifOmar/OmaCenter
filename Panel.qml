@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Bluetooth
 import Quickshell.Networking
+import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 import qs.Commons
 import qs.Ui
@@ -19,14 +20,28 @@ Panel {
 
   readonly property var notificationService: bar?.shell?.firstPartyServiceFor("omarchy.notifications")
   readonly property var nightlightService: bar?.shell?.firstPartyServiceFor("omarchy.nightlight")
-  readonly property var mediaService: bar?.shell?.firstPartyServiceFor("omarchy.media")
 
   readonly property var sink: Pipewire.defaultAudioSink
   readonly property var source: Pipewire.defaultAudioSource
   readonly property var adapter: Bluetooth.defaultAdapter
 
-  readonly property var player: mediaService ? mediaService.activePlayer : null
-  readonly property bool hasMedia: mediaService ? mediaService.hasMedia : false
+  // MPRIS players, bound directly so media works regardless of whether the
+  // omarchy.media plugin is enabled. Prefer a playing player with metadata,
+  // then any player with metadata.
+  readonly property var mprisPlayers: Mpris.players ? Mpris.players.values : []
+  readonly property var player: {
+    var withMetadata = []
+    for (var i = 0; i < root.mprisPlayers.length; i++) {
+      var p = root.mprisPlayers[i]
+      if (!p) continue
+      if (p.trackTitle || p.trackArtist) {
+        if (p.isPlaying) return p
+        withMetadata.push(p)
+      }
+    }
+    return withMetadata.length > 0 ? withMetadata[0] : null
+  }
+  readonly property bool hasMedia: root.player !== null
   readonly property string mediaTitle: player ? (player.trackTitle || "") : ""
   readonly property string mediaArtist: player ? (player.trackArtist || "") : ""
   readonly property bool mediaPlaying: player ? player.isPlaying : false
@@ -204,6 +219,16 @@ Panel {
 
   function toggleMic() {
     if (root.source && root.source.audio) root.source.audio.muted = !root.source.audio.muted
+  }
+
+  // ----------------------------------------------------------------------
+  // Sub-panels: right-click hands off to the matching Omarchy bar widget's
+  // panel. Falls back silently when the target plugin is not enabled.
+  // ----------------------------------------------------------------------
+
+  function summonPanel(pluginId) {
+    if (!bar || !bar.shell || typeof bar.shell.summon !== "function") return
+    bar.shell.summon(pluginId)
   }
 
   // ----------------------------------------------------------------------
@@ -458,6 +483,7 @@ Panel {
                 active: root.wifiEnabled
                 hasCursor: root.hasCursor("wifi")
                 onClicked: root.toggleWifi()
+                onRightClicked: root.summonPanel("omarchy.network")
                 onHoverSignal: function(h) { if (h) root.setCursor("wifi") }
               }
               CircleToggle {
@@ -468,6 +494,7 @@ Panel {
                 active: root.bluetoothEnabled
                 hasCursor: root.hasCursor("bluetooth")
                 onClicked: root.toggleBluetooth()
+                onRightClicked: root.summonPanel("omarchy.bluetooth")
                 onHoverSignal: function(h) { if (h) root.setCursor("bluetooth") }
               }
               CircleToggle {
@@ -478,6 +505,7 @@ Panel {
                 active: root.tailscaleState === "On"
                 hasCursor: root.hasCursor("tailscale")
                 onClicked: root.toggleTailscale()
+                onRightClicked: root.summonPanel("omarchy.tailscale")
                 onHoverSignal: function(h) { if (h) root.setCursor("tailscale") }
               }
               CircleToggle {
@@ -488,6 +516,7 @@ Panel {
                 active: !root.micMuted
                 hasCursor: root.hasCursor("mic")
                 onClicked: root.toggleMic()
+                onRightClicked: root.summonPanel("omarchy.microphone")
                 onHoverSignal: function(h) { if (h) root.setCursor("mic") }
               }
             }
@@ -507,6 +536,7 @@ Panel {
               active: root.dndEnabled
               hasCursor: root.hasCursor("dnd")
               onClicked: root.toggleDnd()
+              onRightClicked: root.summonPanel("shavanced.notification-center")
               onHoverSignal: function(h) { if (h) root.setCursor("dnd") }
             }
 
@@ -537,7 +567,7 @@ Panel {
           onMoved: root.setOutputVolume(v)
           onReleased: root.setOutputVolume(v)
           onIconClicked: root.toggleMute()
-          onRightClicked: root.toggleMute()
+          onRightClicked: root.summonPanel("omarchy.audio")
           onHoverSignal: function(h) { if (h) root.setCursor("volume") }
         }
 
@@ -554,6 +584,7 @@ Panel {
             root.setBrightness(v * 100)
             root.showBrightnessOsd(Math.round(v * 100))
           }
+          onRightClicked: root.summonPanel("omarchy.monitor")
           onHoverSignal: function(h) { if (h) root.setCursor("brightness") }
         }
 
@@ -561,6 +592,7 @@ Panel {
         Tile {
           width: parent.width
           height: Style.space(66)
+          onRightClicked: root.summonPanel("famas.media-plus")
 
           Row {
             anchors.fill: parent
@@ -582,7 +614,7 @@ Panel {
 
                 Text {
                   anchors.centerIn: parent
-                  text: "󰎈"
+                  text: "󰝚"
                   color: root.fg
                   font.family: root.bar ? root.bar.fontFamily : Style.font.family
                   font.pixelSize: Style.font.icon
@@ -621,19 +653,21 @@ Panel {
               spacing: Style.space(6)
 
               MiniButton {
-                glyph: "󰒭"
+                visible: root.player ? root.player.canGoPrevious : false
+                glyph: "󰒝"
                 hasCursor: root.hasCursor("mprev")
                 onClicked: root.mediaPrevious()
                 onHoverSignal: function(h) { if (h) root.setCursor("mprev") }
               }
               MiniButton {
-                glyph: root.mediaPlaying ? "󰒰" : "󰒮"
+                glyph: root.mediaPlaying ? "󰏤" : "󰐊"
                 hasCursor: root.hasCursor("mplay")
                 onClicked: root.togglePlayPause()
                 onHoverSignal: function(h) { if (h) root.setCursor("mplay") }
               }
               MiniButton {
-                glyph: "󰒱"
+                visible: root.player ? root.player.canGoNext : false
+                glyph: "󰒭"
                 hasCursor: root.hasCursor("mnext")
                 onClicked: root.mediaNext()
                 onHoverSignal: function(h) { if (h) root.setCursor("mnext") }
@@ -923,72 +957,77 @@ Panel {
     opacity: dimmed ? 0.55 : 1.0
     Behavior on opacity { NumberAnimation { duration: 120 } }
 
-    Row {
-      anchors.fill: parent
+    Rectangle {
+      id: sliderIcon
+      anchors.left: parent.left
       anchors.leftMargin: Style.space(12)
-      anchors.rightMargin: Style.space(12)
-      spacing: Style.space(12)
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(34)
+      height: width
+      radius: width / 2
+      color: Util.alpha(sliderTile.foreground, 0.13)
 
-      Rectangle {
-        width: Style.space(34)
-        height: width
-        radius: width / 2
-        anchors.verticalCenter: parent.verticalCenter
-        color: Util.alpha(sliderTile.foreground, 0.13)
+      Text {
+        anchors.centerIn: parent
+        text: sliderTile.glyph
+        color: sliderTile.foreground
+        font.family: root.bar ? root.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.icon
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: sliderTile.iconClicked()
+      }
+    }
+
+    Column {
+      anchors.left: sliderIcon.right
+      anchors.leftMargin: Style.space(12)
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(12)
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(3)
+
+      Item {
+        width: parent.width
+        height: Math.max(labelText.implicitHeight, valueText.implicitHeight)
 
         Text {
-          anchors.centerIn: parent
-          text: sliderTile.glyph
+          id: labelText
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+          text: sliderTile.label
           color: sliderTile.foreground
           font.family: root.bar ? root.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.icon
+          font.pixelSize: Style.font.caption
+          font.bold: true
         }
 
-        MouseArea {
-          anchors.fill: parent
-          cursorShape: Qt.PointingHandCursor
-          onClicked: sliderTile.iconClicked()
+        Text {
+          id: valueText
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          text: sliderTile.valueText
+          color: Qt.darker(sliderTile.foreground, 1.5)
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.caption
+          font.bold: true
         }
       }
 
-      Column {
-        width: parent.width - parent.spacing - Style.space(34)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(3)
+      PanelSlider {
+        width: parent.width
+        bar: root.bar
+        value: sliderTile.value
+        minimum: 0
+        maximum: 1
+        step: 0.05
 
-        Row {
-          width: parent.width
-
-          Text {
-            text: sliderTile.label
-            color: sliderTile.foreground
-            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-
-          Text {
-            anchors.right: parent.right
-            text: sliderTile.valueText
-            color: Qt.darker(sliderTile.foreground, 1.5)
-            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: true
-          }
-        }
-
-        PanelSlider {
-          width: parent.width
-          bar: root.bar
-          value: sliderTile.value
-          minimum: 0
-          maximum: 1
-          step: 0.05
-
-          onMoved: function(v) { sliderTile.moved(v) }
-          onReleased: function(v) { sliderTile.released(v) }
-          onRightClicked: sliderTile.rightClicked()
-        }
+        onMoved: function(v) { sliderTile.moved(v) }
+        onReleased: function(v) { sliderTile.released(v) }
+        onRightClicked: sliderTile.rightClicked()
       }
     }
   }
@@ -1019,7 +1058,7 @@ Panel {
       text: mini.glyph
       color: root.fg
       font.family: root.bar ? root.bar.fontFamily : Style.font.family
-      font.pixelSize: Style.font.body
+      font.pixelSize: Style.font.icon
     }
 
     MouseArea {
