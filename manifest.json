@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "saif.control-center",
+  "name": "Control Center",
+  "version": "1.0.0",
+  "author": "saif",
+  "license": "MIT",
+  "description": "A typographic control center: Wi-Fi, Bluetooth, Tailscale, night light, do-not-disturb, mic, volume, brightness, now playing, theme, and power actions in one restrained panel.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Control Center",
+    "description": "System controls in one place",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
