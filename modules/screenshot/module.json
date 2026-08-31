@@ -1,0 +1,15 @@
+{
+  "id": "so.omacenter.screenshot",
+  "name": "Screenshot",
+  "version": "1.0.0",
+  "description": "Capture region, window, or full screen",
+  "author": "saif",
+  "type": "tile",
+  "group": "focus",
+  "width": "half",
+  "icon": "󰹑",
+  "iconInactive": "󰹑",
+  "entry": "ScreenshotTile.qml",
+  "expandable": true,
+  "expandedEntry": "ScreenshotPanel.qml"
+}

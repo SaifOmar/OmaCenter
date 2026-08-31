@@ -1,0 +1,15 @@
+{
+  "id": "so.omacenter.display",
+  "name": "Display",
+  "version": "1.0.0",
+  "description": "Display brightness, night light, and monitor settings",
+  "author": "saif",
+  "type": "slider",
+  "group": "controls",
+  "width": "full",
+  "icon": "󰍹",
+  "iconInactive": "󰍹",
+  "entry": "DisplaySlider.qml",
+  "expandable": true,
+  "expandedEntry": "DisplayPanel.qml"
+}

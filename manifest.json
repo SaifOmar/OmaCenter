@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "saif.control-center",
-  "name": "Control Center",
-  "version": "1.0.0",
+  "id": "so.omacenter",
+  "name": "OmaCenter",
+  "version": "0.8.0",
   "author": "saif",
   "license": "MIT",
   "description": "A macOS-style control center: connectivity circles, focus and night light tiles, sound and display sliders, now playing, theme, and power actions in one frosted tile grid.",
@@ -13,7 +13,7 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "Control Center",
+    "displayName": "OmaCenter",
     "description": "System controls in one place",
     "category": "System",
     "allowMultiple": false,

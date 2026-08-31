@@ -1,0 +1,13 @@
+{
+  "id": "so.omacenter.media",
+  "name": "Now Playing",
+  "version": "1.0.0",
+  "description": "Media playback controls and audio output selector",
+  "author": "saif",
+  "type": "media",
+  "group": "focus",
+  "width": "half",
+  "entry": "MediaTile.qml",
+  "expandable": true,
+  "expandedEntry": "MediaPanel.qml"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "so.omacenter.tailscale",
+  "name": "Tailscale",
+  "version": "1.0.0",
+  "description": "Toggle Tailscale VPN status",
+  "author": "saif",
+  "type": "toggle",
+  "group": "connectivity",
+  "gridSlot": 2,
+  "icon": "󰖂",
+  "iconInactive": "󰖂",
+  "width": "half",
+  "entry": "TailscaleToggle.qml",
+  "expandable": false
+}

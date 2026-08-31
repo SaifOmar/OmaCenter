@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "modules": [
+    { "id": "so.omacenter.wifi", "enabled": true, "order": 1 },
+    { "id": "so.omacenter.bluetooth", "enabled": true, "order": 2 },
+    { "id": "nonexistent.module", "enabled": true, "order": 3 },
+    { "id": "so.omacenter.dnd", "enabled": true, "order": 11 },
+    { "id": "so.omacenter.volume", "enabled": true, "order": 21 }
+  ]
+}

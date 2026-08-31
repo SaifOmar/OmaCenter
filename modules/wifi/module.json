@@ -1,0 +1,16 @@
+{
+  "id": "so.omacenter.wifi",
+  "name": "Wi-Fi",
+  "version": "1.0.0",
+  "description": "Toggle Wi-Fi and manage networks",
+  "author": "saif",
+  "type": "toggle",
+  "group": "connectivity",
+  "gridSlot": 0,
+  "icon": "󰤨",
+  "iconInactive": "󰤭",
+  "width": "half",
+  "entry": "WifiToggle.qml",
+  "expandable": true,
+  "expandedEntry": "WifiPanel.qml"
+}

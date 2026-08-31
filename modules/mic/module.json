@@ -1,0 +1,15 @@
+{
+  "id": "so.omacenter.mic",
+  "name": "Microphone",
+  "version": "1.0.0",
+  "description": "Toggle microphone mute state",
+  "author": "saif",
+  "type": "toggle",
+  "group": "connectivity",
+  "gridSlot": 3,
+  "icon": "󰍬",
+  "iconInactive": "󰍭",
+  "width": "half",
+  "entry": "MicToggle.qml",
+  "expandable": false
+}

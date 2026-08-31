@@ -1,0 +1,9 @@
+{
+  "id": "so.omacenter.dnd",
+  "name": "Do Not Disturb",
+  "type": "tile",
+  "group": "focus",
+  "icon": "󰂚",
+  "width": "half",
+  "entry": "DndTile.qml"
+}

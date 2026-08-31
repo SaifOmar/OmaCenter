@@ -1,0 +1,14 @@
+{
+  "id": "so.omacenter.theme",
+  "name": "Theme",
+  "version": "1.0.0",
+  "description": "Quick theme switcher",
+  "author": "saif",
+  "type": "toggle",
+  "group": "focus",
+  "width": "half",
+  "icon": "󰔎",
+  "iconInactive": "󰔎",
+  "entry": "ThemeTile.qml",
+  "expandable": false
+}

@@ -1,0 +1,14 @@
+{
+  "id": "so.omacenter.nightlight",
+  "name": "Night Light",
+  "version": "1.0.0",
+  "description": "Toggle Night Light and adjust color temperature warmth",
+  "author": "saif",
+  "type": "slider",
+  "group": "controls",
+  "width": "full",
+  "icon": "󰌵",
+  "iconInactive": "󰌶",
+  "entry": "NightLightSlider.qml",
+  "expandable": false
+}

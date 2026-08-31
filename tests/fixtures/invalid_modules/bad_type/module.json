@@ -1,0 +1,8 @@
+{
+  "id": "bad.type",
+  "name": "Bad Type",
+  "type": "invalid_type",
+  "group": "controls",
+  "width": "full",
+  "entry": "Bad.qml"
+}

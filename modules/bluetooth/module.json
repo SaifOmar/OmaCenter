@@ -1,0 +1,16 @@
+{
+  "id": "so.omacenter.bluetooth",
+  "name": "Bluetooth",
+  "version": "1.0.0",
+  "description": "Toggle Bluetooth and manage paired/discovered devices",
+  "author": "saif",
+  "type": "toggle",
+  "group": "connectivity",
+  "gridSlot": 1,
+  "icon": "󰂯",
+  "iconInactive": "󰂲",
+  "width": "half",
+  "entry": "BluetoothToggle.qml",
+  "expandable": true,
+  "expandedEntry": "BluetoothPanel.qml"
+}

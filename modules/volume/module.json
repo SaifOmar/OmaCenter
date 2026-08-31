@@ -1,0 +1,14 @@
+{
+  "id": "so.omacenter.volume",
+  "name": "Sound",
+  "version": "1.0.0",
+  "description": "Output volume control slider",
+  "author": "saif",
+  "type": "slider",
+  "group": "controls",
+  "width": "full",
+  "icon": "󰕾",
+  "iconInactive": "󰝟",
+  "entry": "VolumeSlider.qml",
+  "expandable": false
+}

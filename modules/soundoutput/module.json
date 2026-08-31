@@ -1,0 +1,13 @@
+{
+  "id": "so.omacenter.soundoutput",
+  "name": "Sound Output",
+  "version": "1.0.0",
+  "description": "Audio output device selector",
+  "author": "saif",
+  "type": "custom",
+  "group": "focus",
+  "width": "half",
+  "entry": "SoundOutputTile.qml",
+  "expandable": true,
+  "expandedEntry": "SoundOutputPanel.qml"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "my-ext.calculator",
+  "name": "Calculator",
+  "version": "1.0.0",
+  "description": "A simple calculator",
+  "author": "test",
+  "type": "tile",
+  "group": "controls",
+  "width": "full",
+  "entry": "CalculatorTile.qml"
+}

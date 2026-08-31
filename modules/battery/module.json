@@ -1,0 +1,15 @@
+{
+  "id": "so.omacenter.battery",
+  "name": "Battery & Power",
+  "version": "1.0.0",
+  "description": "Battery status and power profiles switcher",
+  "author": "saif",
+  "type": "tile",
+  "group": "focus",
+  "width": "half",
+  "icon": "󰂄",
+  "iconInactive": "󰁹",
+  "entry": "BatteryTile.qml",
+  "expandable": true,
+  "expandedEntry": "BatteryPanel.qml"
+}

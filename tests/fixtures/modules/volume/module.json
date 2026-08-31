@@ -1,0 +1,9 @@
+{
+  "id": "so.omacenter.volume",
+  "name": "Volume",
+  "type": "slider",
+  "group": "controls",
+  "icon": "󰕾",
+  "width": "full",
+  "entry": "VolumeSlider.qml"
+}
