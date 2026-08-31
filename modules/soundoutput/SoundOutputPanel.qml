@@ -31,7 +31,7 @@ Item {
   }
 
   property string currentSinkInputId: ""
-  property string currentSinkName: ""
+  property string currentSinkId: ""
 
   // Parse pactl list sink-inputs output to find sink-input for our player
   function parseSinkInputs(raw) {
@@ -40,6 +40,7 @@ Item {
     var lines = raw.split("\n")
     var currentId = ""
     var currentAppName = ""
+    var currentSinkId = ""
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim()
@@ -50,6 +51,7 @@ Item {
         if (currentId && currentAppName && root.playerName &&
             currentAppName.toLowerCase() === root.playerName.toLowerCase()) {
           root.currentSinkInputId = currentId
+          root.currentSinkId = currentSinkId
           return
         }
         var idStr = line.replace("Sink Input #", "").trim()
@@ -60,6 +62,13 @@ Item {
           currentId = ""
         }
         currentAppName = ""
+        currentSinkId = ""
+      }
+
+      // Sink ID line (e.g., "Sink: 47")
+      var sinkMatch = line.match(/^Sink:\s*(\d+)/)
+      if (sinkMatch) {
+        currentSinkId = sinkMatch[1]
       }
 
       // Application name property
@@ -73,6 +82,7 @@ Item {
     if (currentId && currentAppName && root.playerName &&
         currentAppName.toLowerCase() === root.playerName.toLowerCase()) {
       root.currentSinkInputId = currentId
+      root.currentSinkId = currentSinkId
     }
   }
 
@@ -204,7 +214,8 @@ Item {
         model: root.audioSinks
         delegate: Rectangle {
           required property var modelData
-          readonly property bool isSelected: root.currentSinkName === modelData.name
+          readonly property bool isSelected: root.currentSinkId !== "" &&
+            String(modelData.properties ? modelData.properties["object.serial"] : "") === root.currentSinkId
           width: parent.width
           height: Style.space(40)
           radius: Style.space(8)
