@@ -56,7 +56,7 @@ Panel {
 
     // ─── Shared styling ────────────────────────────────────────
 
-    readonly property int panelWidth: root.setting("width", 460)
+    readonly property int panelWidth: root.setting("width", 400)
     readonly property color fg: bar ? bar.foreground : Color.foreground
     readonly property color hoverFill: Style.hoverFillFor(fg, Color.accent)
     readonly property color selectedFill: Style.selectedFillFor(fg, Color.accent)
