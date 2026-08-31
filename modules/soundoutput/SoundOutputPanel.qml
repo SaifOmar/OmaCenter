@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Controls
+import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Pipewire
 import qs.Commons
 import qs.Ui
@@ -13,8 +15,8 @@ Item {
 
   implicitHeight: contentColumn.implicitHeight
 
-  readonly property var defaultSink: Pipewire.defaultAudioSink
-  readonly property real sinkVolume: defaultSink && defaultSink.audio ? defaultSink.audio.volume : 0
+  readonly property var activePlayer: panel ? panel.activeMprisPlayer : null
+  readonly property string playerName: activePlayer ? (activePlayer.identity || activePlayer.appName || "Unknown") : ""
   readonly property var pipewireNodes: Pipewire.nodes ? Pipewire.nodes.values : []
   readonly property var audioSinks: {
     var list = []
@@ -28,15 +30,124 @@ Item {
     return list
   }
 
+  property string currentSinkInputId: ""
+  property string currentSinkName: ""
+
+  // Parse pactl list sink-inputs output to find sink-input for our player
+  function parseSinkInputs(raw) {
+    if (!raw || raw.length === 0) return
+
+    var lines = raw.split("\n")
+    var currentId = ""
+    var currentAppName = ""
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim()
+
+      // New sink-input block
+      if (line.indexOf("Sink Input #") === 0) {
+        // Check previous entry
+        if (currentId && currentAppName && root.playerName &&
+            currentAppName.toLowerCase() === root.playerName.toLowerCase()) {
+          root.currentSinkInputId = currentId
+          return
+        }
+        var idStr = line.replace("Sink Input #", "").trim()
+        // Validate: only numeric IDs are safe
+        if (/^\d+$/.test(idStr)) {
+          currentId = idStr
+        } else {
+          currentId = ""
+        }
+        currentAppName = ""
+      }
+
+      // Application name property
+      var appMatch = line.match(/application\.name\s*=\s*"(.+)"/)
+      if (appMatch) {
+        currentAppName = appMatch[1]
+      }
+    }
+
+    // Check last entry
+    if (currentId && currentAppName && root.playerName &&
+        currentAppName.toLowerCase() === root.playerName.toLowerCase()) {
+      root.currentSinkInputId = currentId
+    }
+  }
+
+  // Sanitize: only allow alphanumeric, dots, hyphens, underscores in sink names
+  function sanitizeSinkName(name) {
+    if (!name) return ""
+    return name.replace(/[^a-zA-Z0-9._\-]/g, "")
+  }
+
+  Process {
+    id: listSinkInputsProc
+    command: ["pactl", "list", "sink-inputs"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.parseSinkInputs(text)
+    }
+  }
+
+  Process {
+    id: moveSinkInputProc
+    property string targetSink: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        // Refresh after move
+        listSinkInputsProc.running = true
+      }
+    }
+  }
+
+  Timer {
+    interval: 2000
+    running: root.activePlayer !== null
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: {
+      if (!listSinkInputsProc.running) listSinkInputsProc.running = true
+    }
+  }
+
   Column {
     id: contentColumn
     width: parent.width
     spacing: Style.space(12)
 
-    // Header
+    // No player message
+    Column {
+      width: parent.width
+      visible: !root.activePlayer
+      spacing: Style.space(4)
+
+      Text {
+        width: parent.width
+        text: "No active media player"
+        color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
+        font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.body
+        horizontalAlignment: Text.AlignHCenter
+      }
+
+      Text {
+        width: parent.width
+        text: "Play some media to route its audio"
+        color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.5)
+        font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.caption
+        horizontalAlignment: Text.AlignHCenter
+      }
+    }
+
+    // Header (when player is active)
     Row {
       width: parent.width
       spacing: Style.space(8)
+      visible: root.activePlayer !== null
 
       Rectangle {
         width: Style.space(28)
@@ -58,7 +169,7 @@ Item {
         spacing: Style.space(1)
 
         Text {
-          text: "Sound Output"
+          text: "Route Audio"
           color: root.panel ? root.panel.fg : Color.foreground
           font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
           font.pixelSize: Style.font.body
@@ -66,88 +177,10 @@ Item {
         }
 
         Text {
-          text: root.defaultSink ? (root.defaultSink.description || root.defaultSink.name || "Unknown") : "No device"
+          text: root.playerName
           color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
           font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
           font.pixelSize: Style.font.caption
-        }
-      }
-    }
-
-    // Volume Control
-    Column {
-      width: parent.width
-      spacing: Style.space(4)
-
-      Text {
-        text: "VOLUME"
-        color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
-        font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        font.letterSpacing: 1.2
-      }
-
-      Row {
-        width: parent.width
-        spacing: Style.space(8)
-
-        Text {
-          text: "󰕾"
-          color: root.panel ? root.panel.fg : Color.foreground
-          font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.icon
-          anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Item {
-          id: volumeTrack
-          width: parent.width - Style.space(70)
-          height: Style.space(20)
-          anchors.verticalCenter: parent.verticalCenter
-
-          Rectangle {
-            anchors.centerIn: parent
-            width: parent.width
-            height: Style.space(8)
-            radius: height / 2
-            color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
-
-            Rectangle {
-              width: Math.max(0, Math.min(parent.width, parent.width * root.sinkVolume))
-              height: parent.height
-              radius: height / 2
-              color: root.panel ? root.panel.fg : Color.foreground
-            }
-          }
-
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: function(mouse) {
-              if (root.defaultSink && root.defaultSink.audio) {
-                var v = Math.max(0, Math.min(1, mouse.x / width))
-                root.defaultSink.audio.volume = v
-              }
-            }
-            onPositionChanged: function(mouse) {
-              if (pressed && root.defaultSink && root.defaultSink.audio) {
-                var v = Math.max(0, Math.min(1, mouse.x / width))
-                root.defaultSink.audio.volume = v
-              }
-            }
-          }
-        }
-
-        Text {
-          text: Math.round(root.sinkVolume * 100) + "%"
-          color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.7)
-          font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.caption
-          font.bold: true
-          anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(32)
-          horizontalAlignment: Text.AlignRight
         }
       }
     }
@@ -156,7 +189,7 @@ Item {
     Column {
       width: parent.width
       spacing: Style.space(4)
-      visible: root.audioSinks.length > 0
+      visible: root.activePlayer !== null && root.audioSinks.length > 0
 
       Text {
         text: "OUTPUT DEVICES"
@@ -171,7 +204,7 @@ Item {
         model: root.audioSinks
         delegate: Rectangle {
           required property var modelData
-          readonly property bool isSelected: root.defaultSink && root.defaultSink === modelData
+          readonly property bool isSelected: root.currentSinkName === modelData.name
           width: parent.width
           height: Style.space(40)
           radius: Style.space(8)
@@ -210,7 +243,11 @@ Item {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: {
-              Pipewire.preferredDefaultAudioSink = modelData
+              var sinkName = root.sanitizeSinkName(modelData.name)
+              if (sinkName && root.currentSinkInputId) {
+                moveSinkInputProc.command = ["pactl", "move-sink-input", root.currentSinkInputId, sinkName]
+                moveSinkInputProc.running = true
+              }
             }
           }
         }

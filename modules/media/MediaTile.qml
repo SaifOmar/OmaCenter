@@ -114,7 +114,10 @@ CursorSurface {
       cursorShape: Qt.PointingHandCursor
       onClicked: function(e) {
         e.accepted = true
-        if (root.panel) root.panel.expandModule(root.soundOutputModuleId, "Sound Output")
+        if (root.panel) {
+          root.panel.activeMprisPlayer = root.player
+          root.panel.expandModule(root.soundOutputModuleId, "Sound Output")
+        }
       }
     }
   }

@@ -41,6 +41,7 @@ Panel {
 
     property string expandedModuleId: ""
     property string expandedModuleName: ""
+    property var activeMprisPlayer: null
 
     function expandModule(moduleId, moduleName) {
         root.expandedModuleId = moduleId;
@@ -50,6 +51,7 @@ Panel {
     function collapseExpanded() {
         root.expandedModuleId = "";
         root.expandedModuleName = "";
+        root.activeMprisPlayer = null;
     }
 
     // ─── Shared styling ────────────────────────────────────────
