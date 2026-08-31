@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
-import Quickshell.Services.Pipewire
 import qs.Commons
 import qs.Ui
 
@@ -17,66 +16,66 @@ Item {
 
   readonly property var activePlayer: panel ? panel.activeMprisPlayer : null
   readonly property string playerName: activePlayer ? (activePlayer.identity || activePlayer.appName || "Unknown") : ""
-  readonly property var pipewireNodes: Pipewire.nodes ? Pipewire.nodes.values : []
-  readonly property var audioSinks: {
-    var list = []
-    var nodes = root.pipewireNodes
-    for (var i = 0; i < nodes.length; i++) {
-      var node = nodes[i]
-      if (node && node.isSink && !node.isStream) {
-        list.push(node)
-      }
-    }
-    return list
-  }
 
   property string currentSinkInputId: ""
-  property string currentSinkId: ""
+  property string currentSinkName: ""
+
+  // Device list from pactl: [{name, description}]
+  property var devices: []
 
   function parseSinkInputs(raw) {
     if (!raw || raw.length === 0) return
 
     var lines = raw.split("\n")
-    var currentId = ""
-    var currentAppName = ""
-    var currentSinkId = ""
+    var id = ""
+    var appName = ""
+    var sinkName = ""
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim()
 
       if (line.indexOf("Sink Input #") === 0) {
-        if (currentId && currentAppName && root.playerName &&
-            currentAppName.toLowerCase() === root.playerName.toLowerCase()) {
-          root.currentSinkInputId = currentId
-          root.currentSinkId = currentSinkId
+        if (id && appName && root.playerName &&
+            appName.toLowerCase() === root.playerName.toLowerCase()) {
+          root.currentSinkInputId = id
+          root.currentSinkName = sinkName
           return
         }
         var idStr = line.replace("Sink Input #", "").trim()
-        if (/^\d+$/.test(idStr)) {
-          currentId = idStr
-        } else {
-          currentId = ""
-        }
-        currentAppName = ""
-        currentSinkId = ""
+        id = /^\d+$/.test(idStr) ? idStr : ""
+        appName = ""
+        sinkName = ""
       }
 
-      var sinkMatch = line.match(/^Sink:\s*(\d+)/)
-      if (sinkMatch) {
-        currentSinkId = sinkMatch[1]
+      var nameMatch = line.match(/^Name:\s*(.+)/)
+      if (nameMatch && id) {
+        sinkName = nameMatch[1].trim()
       }
 
       var appMatch = line.match(/application\.name\s*=\s*"(.+)"/)
       if (appMatch) {
-        currentAppName = appMatch[1]
+        appName = appMatch[1]
       }
     }
 
-    if (currentId && currentAppName && root.playerName &&
-        currentAppName.toLowerCase() === root.playerName.toLowerCase()) {
-      root.currentSinkInputId = currentId
-      root.currentSinkId = currentSinkId
+    if (id && appName && root.playerName &&
+        appName.toLowerCase() === root.playerName.toLowerCase()) {
+      root.currentSinkInputId = id
+      root.currentSinkName = sinkName
     }
+  }
+
+  function parseSinksList(raw) {
+    if (!raw || raw.length === 0) return
+    var lines = raw.split("\n")
+    var list = []
+    for (var i = 0; i < lines.length; i++) {
+      var parts = lines[i].trim().split(/\s{2,}/)
+      if (parts.length >= 2) {
+        list.push({ name: parts[0], description: parts[1] || parts[0] })
+      }
+    }
+    root.devices = list
   }
 
   function routeToSink(sinkName) {
@@ -95,6 +94,15 @@ Item {
   }
 
   Process {
+    id: listSinksProc
+    command: ["pactl", "list", "sinks", "short"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.parseSinksList(text)
+    }
+  }
+
+  Process {
     id: moveSinkInputProc
     stdout: StdioCollector {
       waitForEnd: true
@@ -109,7 +117,12 @@ Item {
     triggeredOnStart: true
     onTriggered: {
       if (!listSinkInputsProc.running) listSinkInputsProc.running = true
+      if (!listSinksProc.running) listSinksProc.running = true
     }
+  }
+
+  Component.onCompleted: {
+    listSinksProc.running = true
   }
 
   Column {
@@ -185,7 +198,7 @@ Item {
     Column {
       width: parent.width
       spacing: Style.space(4)
-      visible: root.activePlayer !== null && root.audioSinks.length > 0
+      visible: root.activePlayer !== null && root.devices.length > 0
 
       Text {
         text: "OUTPUT DEVICES"
@@ -197,16 +210,16 @@ Item {
       }
 
       Repeater {
-        model: root.audioSinks
+        model: root.devices
         delegate: Rectangle {
           id: deviceRow
           required property var modelData
-          readonly property bool isSelected: root.currentSinkId !== "" &&
-            String(modelData.properties ? modelData.properties["object.serial"] : "") === root.currentSinkId
+          required property int index
+          readonly property bool isSelected: root.currentSinkName !== "" && modelData.name === root.currentSinkName
           property bool isHovered: false
 
           width: parent.width
-          height: Style.space(60)
+          height: Style.space(52)
           radius: Style.space(10)
           color: isSelected
             ? Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.18)

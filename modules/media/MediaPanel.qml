@@ -15,7 +15,7 @@ Item {
   property string moduleDir: ""
   readonly property string moduleId: "so.omacenter.media"
 
-  implicitHeight: Style.space(520)
+  implicitHeight: Style.space(400)
 
   // ─── Sticky MPRIS State ─────────────────────────────────────
 
@@ -195,7 +195,7 @@ Item {
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
-    spacing: Style.space(12)
+    spacing: Style.space(6)
 
     // Player Switcher Bar (visible if multiple media sources exist)
     Row {
@@ -245,7 +245,7 @@ Item {
     Item {
       id: bigArtContainer
       width: parent.width
-      height: Style.space(180)
+      height: Style.space(140)
       anchors.horizontalCenter: parent.horizontalCenter
 
       Item {
@@ -345,8 +345,8 @@ Item {
     // 3. Seekable Progress Bar with timers on both sides
     Column {
       width: parent.width
-      height: Style.space(30)
-      spacing: Style.space(4)
+      height: Style.space(24)
+      spacing: Style.space(2)
 
       Row {
         width: parent.width
@@ -418,15 +418,15 @@ Item {
     anchors.bottom: parent.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    spacing: Style.space(12)
+    spacing: Style.space(6)
 
     // Transport Controls
     Row {
       anchors.horizontalCenter: parent.horizontalCenter
-      spacing: Style.space(18)
+      spacing: Style.space(14)
 
       Rectangle {
-        width: Style.space(40)
+        width: Style.space(36)
         height: width
         radius: width / 2
         color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.1)
@@ -447,7 +447,7 @@ Item {
       }
 
       Rectangle {
-        width: Style.space(40)
+        width: Style.space(36)
         height: width
         radius: width / 2
         color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
@@ -468,7 +468,7 @@ Item {
       }
 
       Rectangle {
-        width: Style.space(40)
+        width: Style.space(36)
         height: width
         radius: width / 2
         color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.1)
