@@ -38,10 +38,9 @@ CursorSurface {
     id: mouseArea
     anchors.fill: parent
     hoverEnabled: true
-    acceptedButtons: Qt.RightButton
     cursorShape: Qt.PointingHandCursor
     onClicked: {
-      if (root.panel) root.panel.summonPanel("omarchy.audio")
+      if (root.panel) root.panel.expandModule(root.moduleId, "Sound Output")
     }
   }
 
@@ -77,8 +76,12 @@ CursorSurface {
 
           MouseArea {
             anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.toggleMute()
+            onClicked: function(e) {
+              e.accepted = true
+              root.toggleMute()
+            }
           }
         }
 
@@ -132,6 +135,7 @@ CursorSurface {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: function(mouse) {
+          mouse.accepted = true
           var v = Math.max(0, Math.min(1, mouse.x / width))
           root.setOutputVolume(v)
         }

@@ -61,10 +61,9 @@ CursorSurface {
     id: mouseArea
     anchors.fill: parent
     hoverEnabled: true
-    acceptedButtons: Qt.RightButton
     cursorShape: Qt.PointingHandCursor
     onClicked: {
-      if (root.panel) root.panel.summonPanel("omarchy.display")
+      if (root.panel) root.panel.expandModule(root.moduleId, "Display Management")
     }
   }
 
@@ -106,7 +105,7 @@ CursorSurface {
       }
 
       Item {
-        width: parent.width - parent.children[0].implicitWidth - valText.implicitWidth - Style.space(28)
+        width: parent.width - parent.children[0].implicitWidth - valText.implicitWidth
         height: 1
       }
 
@@ -118,31 +117,6 @@ CursorSurface {
         font.pixelSize: Style.font.caption
         font.bold: true
         anchors.verticalCenter: parent.verticalCenter
-      }
-
-      // Chevron button to open full Display Management inner menu
-      Rectangle {
-        width: Style.space(22)
-        height: width
-        radius: width / 2
-        anchors.verticalCenter: parent.verticalCenter
-        color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.08)
-
-        Text {
-          anchors.centerIn: parent
-          text: "󰅂"
-          color: root.panel ? root.panel.fg : Color.foreground
-          font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.caption
-        }
-
-        MouseArea {
-          anchors.fill: parent
-          cursorShape: Qt.PointingHandCursor
-          onClicked: {
-            if (root.panel) root.panel.expandModule(root.moduleId, "Display Management")
-          }
-        }
       }
     }
 
@@ -169,6 +143,7 @@ CursorSurface {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: function(mouse) {
+          mouse.accepted = true
           root.setBrightness(mouse.x / width)
         }
         onPositionChanged: function(mouse) {

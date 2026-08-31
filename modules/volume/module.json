@@ -10,5 +10,6 @@
   "icon": "󰕾",
   "iconInactive": "󰝟",
   "entry": "VolumeSlider.qml",
-  "expandable": false
+  "expandable": true,
+  "expandedEntry": "VolumePanel.qml"
 }
