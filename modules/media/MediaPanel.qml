@@ -450,29 +450,29 @@ Item {
     }
 
     // 5. Volume strip: [low icon] [slider] [high icon]
-    // Volume is 90% width of seek bar (centered via extra padding)
+    // Compact: 80% width of content, thin bar
     Row {
-      width: parent.width * 0.9
+      width: parent.width * 0.8
       anchors.horizontalCenter: parent.horizontalCenter
-      spacing: Style.space(6)
+      spacing: Style.space(4)
 
       Text {
         text: "󰕾"
-        color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.6)
+        color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.5)
         font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.body
+        font.pixelSize: Style.font.caption
         anchors.verticalCenter: parent.verticalCenter
       }
 
       Item {
-        width: parent.width - Style.space(36)
-        height: Style.space(16)
+        width: parent.width - Style.space(28)
+        height: Style.space(14)
         anchors.verticalCenter: parent.verticalCenter
 
         Rectangle {
           anchors.centerIn: parent
           width: parent.width
-          height: Style.space(6)
+          height: Style.space(5)
           radius: height / 2
           color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
 
@@ -502,9 +502,9 @@ Item {
 
       Text {
         text: "󰕾"
-        color: root.panel ? root.panel.fg : Color.foreground
+        color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.8)
         font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.body
+        font.pixelSize: Style.font.caption
         anchors.verticalCenter: parent.verticalCenter
       }
     }
