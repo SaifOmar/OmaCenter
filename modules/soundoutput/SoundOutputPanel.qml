@@ -32,10 +32,7 @@ Item {
 
   property string currentSinkInputId: ""
   property string currentSinkId: ""
-  // Map of sink name -> volume (0.0-1.0)
-  property var sinkVolumes: ({})
 
-  // Parse pactl list sink-inputs output to find sink-input for our player
   function parseSinkInputs(raw) {
     if (!raw || raw.length === 0) return
 
@@ -82,46 +79,10 @@ Item {
     }
   }
 
-  // Parse pactl list sinks to get volume for each sink
-  function parseSinks(raw) {
-    if (!raw || raw.length === 0) return
-
-    var lines = raw.split("\n")
-    var currentName = ""
-    var volumes = {}
-
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim()
-
-      if (line.indexOf("Sink #") === 0) {
-        currentName = ""
-      }
-
-      var nameMatch = line.match(/^Name:\s*(.+)/)
-      if (nameMatch) {
-        currentName = nameMatch[1].trim()
-      }
-
-      // Volume line: "Volume: front-left: 32768 / 50% / -18.06 dB,   front-right: 32768 / 50% / -18.06 dB"
-      var volMatch = line.match(/Volume:\s*front-left:\s*\d+\s*\/\s*(\d+)%/)
-      if (volMatch && currentName) {
-        volumes[currentName] = parseInt(volMatch[1]) / 100.0
-      }
-    }
-
-    root.sinkVolumes = volumes
-  }
-
-  function sanitizeSinkName(name) {
-    if (!name) return ""
-    return name.replace(/[^a-zA-Z0-9._\-]/g, "")
-  }
-
-  function setSinkVolume(sinkName, volume) {
-    var clamped = Math.max(0, Math.min(1, volume))
-    var pct = Math.round(clamped * 100)
-    setSinkVolumeProc.command = ["pactl", "set-sink-volume", sinkName, pct + "%"]
-    setSinkVolumeProc.running = true
+  function routeToSink(sinkName) {
+    if (!sinkName || !root.currentSinkInputId) return
+    moveSinkInputProc.command = ["pactl", "move-sink-input", root.currentSinkInputId, sinkName]
+    moveSinkInputProc.running = true
   }
 
   Process {
@@ -134,36 +95,20 @@ Item {
   }
 
   Process {
-    id: listSinksProc
-    command: ["pactl", "list", "sinks"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.parseSinks(text)
-    }
-  }
-
-  Process {
     id: moveSinkInputProc
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: {
-        listSinkInputsProc.running = true
-      }
+      onFinished: listSinkInputsProc.running = true
     }
   }
 
-  Process {
-    id: setSinkVolumeProc
-  }
-
   Timer {
-    interval: 2000
+    interval: 800
     running: root.activePlayer !== null
     repeat: true
     triggeredOnStart: true
     onTriggered: {
       if (!listSinkInputsProc.running) listSinkInputsProc.running = true
-      if (!listSinksProc.running) listSinksProc.running = true
     }
   }
 
@@ -172,7 +117,6 @@ Item {
     width: parent.width
     spacing: Style.space(12)
 
-    // No player message
     Column {
       width: parent.width
       visible: !root.activePlayer
@@ -197,7 +141,6 @@ Item {
       }
     }
 
-    // Header
     Row {
       width: parent.width
       spacing: Style.space(8)
@@ -239,7 +182,6 @@ Item {
       }
     }
 
-    // Output Devices
     Column {
       width: parent.width
       spacing: Style.space(4)
@@ -261,101 +203,65 @@ Item {
           required property var modelData
           readonly property bool isSelected: root.currentSinkId !== "" &&
             String(modelData.properties ? modelData.properties["object.serial"] : "") === root.currentSinkId
-          readonly property real deviceVolume: {
-            var vol = root.sinkVolumes[modelData.name]
-            return vol !== undefined ? vol : 0.5
-          }
+          property bool isHovered: false
+
           width: parent.width
-          height: Style.space(52)
-          radius: Style.space(8)
+          height: Style.space(60)
+          radius: Style.space(10)
           color: isSelected
-            ? Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.12)
-            : Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.05)
+            ? Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.18)
+            : isHovered
+              ? Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.08)
+              : Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.03)
 
-          Column {
+          Behavior on color {
+            ColorAnimation { duration: 120 }
+          }
+
+          Row {
             anchors.fill: parent
-            anchors.margins: Style.space(6)
-            spacing: Style.space(2)
+            anchors.margins: Style.space(10)
+            spacing: Style.space(10)
 
-            // Top row: icon + name + volume %
-            Row {
-              width: parent.width
-              spacing: Style.space(6)
-
-              Text {
-                text: deviceRow.isSelected ? "󰓃" : "󰋋"
-                color: deviceRow.isSelected
-                  ? (root.panel ? root.panel.fg : Color.foreground)
-                  : Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.6)
-                font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.body
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Text {
-                text: modelData.description || modelData.name || "Audio Device"
-                color: root.panel ? root.panel.fg : Color.foreground
-                font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.body
-                font.bold: deviceRow.isSelected
-                elide: Text.ElideRight
-                width: parent.width - Style.space(60)
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Text {
-                text: Math.round(deviceRow.deviceVolume * 100) + "%"
-                color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.6)
-                font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.verticalCenter: parent.verticalCenter
-              }
+            Text {
+              text: deviceRow.isSelected ? "󰓃" : "󰋋"
+              color: deviceRow.isSelected
+                ? (root.panel ? root.panel.fg : Color.foreground)
+                : Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.6)
+              font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+              font.pixelSize: Style.font.icon
+              anchors.verticalCenter: parent.verticalCenter
             }
 
-            // Volume bar (bigger, drag-to-adjust)
-            Item {
-              width: parent.width
-              height: Style.space(14)
-
-              Rectangle {
-                anchors.centerIn: parent
-                width: parent.width
-                height: Style.space(6)
-                radius: height / 2
-                color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
-
-                Rectangle {
-                  width: Math.max(0, Math.min(parent.width, parent.width * deviceRow.deviceVolume))
-                  height: parent.height
-                  radius: height / 2
-                  color: deviceRow.isSelected
-                    ? (root.panel ? root.panel.fg : Color.foreground)
-                    : Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.6)
-                }
-              }
-
-              MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: function(mouse) {
-                  // Click to route + set volume
-                  var sinkName = root.sanitizeSinkName(modelData.name)
-                  if (sinkName && root.currentSinkInputId) {
-                    moveSinkInputProc.command = ["pactl", "move-sink-input", root.currentSinkInputId, sinkName]
-                    moveSinkInputProc.running = true
-                  }
-                  var v = Math.max(0, Math.min(1, mouse.x / width))
-                  root.setSinkVolume(modelData.name, v)
-                }
-                onPositionChanged: function(mouse) {
-                  if (pressed) {
-                    var v = Math.max(0, Math.min(1, mouse.x / width))
-                    root.setSinkVolume(modelData.name, v)
-                  }
-                }
-              }
+            Text {
+              text: modelData.description || modelData.name || "Audio Device"
+              color: root.panel ? root.panel.fg : Color.foreground
+              font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+              font.pixelSize: Style.font.body
+              font.bold: deviceRow.isSelected
+              elide: Text.ElideRight
+              width: parent.width - Style.space(50)
+              anchors.verticalCenter: parent.verticalCenter
             }
+
+            Text {
+              text: "✓"
+              visible: deviceRow.isSelected
+              color: root.panel ? root.panel.fg : Color.foreground
+              font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+              font.pixelSize: Style.font.body
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onEntered: deviceRow.isHovered = true
+            onExited: deviceRow.isHovered = false
+            onClicked: root.routeToSink(modelData.name)
           }
         }
       }

@@ -489,144 +489,61 @@ Item {
       }
     }
 
-    // Volume Level Control (per-player stream)
-    Column {
+    // Volume strip: [low icon] [slider] [high icon]
+    Row {
       width: parent.width
-      spacing: Style.space(4)
+      spacing: Style.space(8)
 
       Text {
-        text: "STREAM VOLUME"
-        color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
+        text: "󰕾"
+        color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.6)
         font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        font.letterSpacing: 1.2
+        font.pixelSize: Style.font.icon
+        anchors.verticalCenter: parent.verticalCenter
       }
 
-      Row {
-        width: parent.width
-        spacing: Style.space(8)
+      Item {
+        width: parent.width - Style.space(70)
+        height: Style.space(20)
+        anchors.verticalCenter: parent.verticalCenter
 
-        Text {
-          text: "󰕾"
-          color: root.panel ? root.panel.fg : Color.foreground
-          font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.icon
-          anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Item {
-          id: volumeTrack
-          width: parent.width - Style.space(70)
-          height: Style.space(20)
-          anchors.verticalCenter: parent.verticalCenter
+        Rectangle {
+          anchors.centerIn: parent
+          width: parent.width
+          height: Style.space(8)
+          radius: height / 2
+          color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
 
           Rectangle {
-            anchors.centerIn: parent
-            width: parent.width
-            height: Style.space(8)
+            width: Math.max(0, Math.min(parent.width, parent.width * root.playerStreamVolume))
+            height: parent.height
             radius: height / 2
-            color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
-
-            Rectangle {
-              width: Math.max(0, Math.min(parent.width, parent.width * root.playerStreamVolume))
-              height: parent.height
-              radius: height / 2
-              color: root.panel ? root.panel.fg : Color.foreground
-            }
+            color: root.panel ? root.panel.fg : Color.foreground
           }
+        }
 
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: function(mouse) {
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: function(mouse) {
+            var v = Math.max(0, Math.min(1, mouse.x / width))
+            root.setPlayerStreamVolume(v)
+          }
+          onPositionChanged: function(mouse) {
+            if (pressed) {
               var v = Math.max(0, Math.min(1, mouse.x / width))
               root.setPlayerStreamVolume(v)
             }
-            onPositionChanged: function(mouse) {
-              if (pressed) {
-                var v = Math.max(0, Math.min(1, mouse.x / width))
-                root.setPlayerStreamVolume(v)
-              }
-            }
           }
         }
-
-        Text {
-          text: Math.round(root.playerStreamVolume * 100) + "%"
-          color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.7)
-          font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.caption
-          font.bold: true
-          anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(32)
-          horizontalAlignment: Text.AlignRight
-        }
       }
-    }
-
-    // 6. Output Source Selector (Audio Sinks)
-    Column {
-      width: parent.width
-      spacing: Style.space(4)
-      visible: root.audioSinks.length > 0
 
       Text {
-        text: "OUTPUT DEVICE"
-        color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
+        text: "󰕾"
+        color: root.panel ? root.panel.fg : Color.foreground
         font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-        font.letterSpacing: 1.2
-      }
-
-      Repeater {
-        model: root.audioSinks
-        delegate: Rectangle {
-          required property var modelData
-          readonly property bool isSelected: root.defaultSink && root.defaultSink === modelData
-          width: parent.width
-          height: Style.space(36)
-          radius: Style.space(8)
-          color: isSelected
-            ? Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.08)
-            : Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.03)
-
-          Row {
-            anchors.fill: parent
-            anchors.margins: Style.space(8)
-            spacing: Style.space(8)
-
-            Text {
-              text: isSelected ? "󰓃" : "󰋋"
-              color: isSelected
-                ? (root.panel ? root.panel.fg : Color.foreground)
-                : Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.6)
-              font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-              font.pixelSize: Style.font.body
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-              text: modelData.description || modelData.name || "Audio Device"
-              color: root.panel ? root.panel.fg : Color.foreground
-              font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-              font.pixelSize: Style.font.body
-              font.bold: isSelected
-              elide: Text.ElideRight
-              width: parent.width - Style.space(40)
-              anchors.verticalCenter: parent.verticalCenter
-            }
-          }
-
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              Pipewire.preferredDefaultAudioSink = modelData
-            }
-          }
-        }
+        font.pixelSize: Style.font.icon
+        anchors.verticalCenter: parent.verticalCenter
       }
     }
   }
