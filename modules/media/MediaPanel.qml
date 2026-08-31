@@ -15,7 +15,7 @@ Item {
   property string moduleDir: ""
   readonly property string moduleId: "so.omacenter.media"
 
-  implicitHeight: Style.space(400)
+  implicitHeight: contentColumn.implicitHeight
 
   // ─── Sticky MPRIS State ─────────────────────────────────────
 
@@ -39,17 +39,12 @@ Item {
       }
     }
 
-    // 1. If any player is actively playing, prefer it
     if (playingPlayer) return playingPlayer
-
-    // 2. If paused, stay on sticky player if it's still available
     if (root.stickyPlayer) {
       for (var j = 0; j < players.length; j++) {
         if (players[j] === root.stickyPlayer) return root.stickyPlayer
       }
     }
-
-    // 3. Otherwise fallback to first available with metadata
     return fallbackPlayer
   }
 
@@ -64,23 +59,6 @@ Item {
   readonly property bool mediaPlaying: player ? player.isPlaying : false
   readonly property real mediaPosition: player && player.position >= 0 ? player.position : 0
   readonly property real mediaDuration: player && player.length >= 0 ? player.length : 0
-
-  // ─── Audio Pipewire Sinks ──────────────────────────────────
-
-  readonly property var defaultSink: Pipewire.defaultAudioSink
-  readonly property real sinkVolume: defaultSink && defaultSink.audio ? defaultSink.audio.volume : 0
-  readonly property var pipewireNodes: Pipewire.nodes ? Pipewire.nodes.values : []
-  readonly property var audioSinks: {
-    var list = []
-    var nodes = root.pipewireNodes
-    for (var i = 0; i < nodes.length; i++) {
-      var node = nodes[i]
-      if (node && node.isSink && !node.isStream) {
-        list.push(node)
-      }
-    }
-    return list
-  }
 
   // ─── Per-player stream volume ──────────────────────────────
 
@@ -118,7 +96,6 @@ Item {
         currentAppName = appMatch[1]
       }
 
-      // Volume line for this sink-input
       var volMatch = line.match(/Volume:\s*front-left:\s*\d+\s*\/\s*(\d+)%/)
       if (volMatch && currentId && currentAppName &&
           currentAppName.toLowerCase() === playerName.toLowerCase()) {
@@ -188,14 +165,11 @@ Item {
     return mins + ":" + (secs < 10 ? "0" : "") + secs
   }
 
-  // Top content (flows from top)
+  // Everything flows top-to-bottom, no bottom anchoring
   Column {
-    id: mediaContent
+    id: contentColumn
     width: parent.width
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    spacing: Style.space(6)
+    spacing: Style.space(8)
 
     // Player Switcher Bar (visible if multiple media sources exist)
     Row {
@@ -209,7 +183,7 @@ Item {
         delegate: Rectangle {
           required property var modelData
           readonly property bool isSelected: root.player === modelData
-          width: Math.min(Style.space(100), (mediaContent.width - (root.mprisPlayers.length - 1) * Style.space(6)) / root.mprisPlayers.length)
+          width: Math.min(Style.space(100), (contentColumn.width - (root.mprisPlayers.length - 1) * Style.space(6)) / root.mprisPlayers.length)
           height: Style.space(26)
           radius: Style.space(6)
           color: isSelected
@@ -241,11 +215,11 @@ Item {
       }
     }
 
-    // 1. Album Art (fixed container, image fills it)
+    // 1. Album Art
     Item {
       id: bigArtContainer
       width: parent.width
-      height: Style.space(140)
+      height: Style.space(180)
       anchors.horizontalCenter: parent.horizontalCenter
 
       Item {
@@ -303,10 +277,10 @@ Item {
       }
     }
 
-    // 2. Track Info: Title, Artist, Source
+    // 2. Track Info
     Column {
       width: parent.width
-      spacing: Style.space(3)
+      spacing: Style.space(2)
 
       Text {
         width: parent.width
@@ -343,90 +317,76 @@ Item {
     }
 
     // 3. Seekable Progress Bar with timers on both sides
-    Column {
+    // Seek bar is slightly wider than volume (volume = 90% of seek width)
+    Row {
       width: parent.width
-      height: Style.space(24)
-      spacing: Style.space(2)
+      spacing: Style.space(8)
 
-      Row {
-        width: parent.width
-        spacing: Style.space(8)
+      Text {
+        id: seekLeft
+        text: root.formatTime(root.mediaPosition)
+        color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
+        font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.caption
+        anchors.verticalCenter: parent.verticalCenter
+      }
 
-        Text {
-          id: seekLeft
-          text: root.formatTime(root.mediaPosition)
-          color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
-          font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.caption
-          anchors.verticalCenter: parent.verticalCenter
-        }
+      Item {
+        id: seekTrack
+        width: parent.width - seekLeft.implicitWidth - seekRight.implicitWidth - parent.spacing * 2
+        height: Style.space(16)
+        anchors.verticalCenter: parent.verticalCenter
 
-        Item {
-          id: seekTrack
-          width: parent.width - seekLeft.implicitWidth - seekRight.implicitWidth - parent.spacing * 2
-          height: Style.space(16)
-          anchors.verticalCenter: parent.verticalCenter
+        Rectangle {
+          anchors.centerIn: parent
+          width: parent.width
+          height: Style.space(6)
+          radius: height / 2
+          color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
 
           Rectangle {
-            anchors.centerIn: parent
-            width: parent.width
-            height: Style.space(6)
+            width: root.mediaDuration > 0 ? Math.max(0, Math.min(parent.width, parent.width * (root.mediaPosition / root.mediaDuration))) : 0
+            height: parent.height
             radius: height / 2
-            color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
-
-            Rectangle {
-              width: root.mediaDuration > 0 ? Math.max(0, Math.min(parent.width, parent.width * (root.mediaPosition / root.mediaDuration))) : 0
-              height: parent.height
-              radius: height / 2
-              color: root.panel ? root.panel.fg : Color.foreground
-            }
-          }
-
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: function(mouse) {
-              if (root.player && root.player.canSeek && root.mediaDuration > 0) {
-                var ratio = Math.max(0, Math.min(1, mouse.x / width))
-                root.player.position = ratio * root.mediaDuration
-              }
-            }
-            onPositionChanged: function(mouse) {
-              if (pressed && root.player && root.player.canSeek && root.mediaDuration > 0) {
-                var ratio = Math.max(0, Math.min(1, mouse.x / width))
-                root.player.position = ratio * root.mediaDuration
-              }
-            }
+            color: root.panel ? root.panel.fg : Color.foreground
           }
         }
 
-        Text {
-          id: seekRight
-          text: root.formatTime(root.mediaDuration)
-          color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
-          font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.caption
-          anchors.verticalCenter: parent.verticalCenter
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: function(mouse) {
+            if (root.player && root.player.canSeek && root.mediaDuration > 0) {
+              var ratio = Math.max(0, Math.min(1, mouse.x / width))
+              root.player.position = ratio * root.mediaDuration
+            }
+          }
+          onPositionChanged: function(mouse) {
+            if (pressed && root.player && root.player.canSeek && root.mediaDuration > 0) {
+              var ratio = Math.max(0, Math.min(1, mouse.x / width))
+              root.player.position = ratio * root.mediaDuration
+            }
+          }
         }
       }
+
+      Text {
+        id: seekRight
+        text: root.formatTime(root.mediaDuration)
+        color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
+        font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.caption
+        anchors.verticalCenter: parent.verticalCenter
+      }
     }
-  }
 
-  // Bottom content (anchored to bottom, stays in place)
-  Column {
-    width: parent.width
-    anchors.bottom: parent.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    spacing: Style.space(6)
-
-    // Transport Controls
+    // 4. Transport Controls
     Row {
       anchors.horizontalCenter: parent.horizontalCenter
-      spacing: Style.space(14)
+      spacing: Style.space(18)
 
       Rectangle {
-        width: Style.space(36)
+        width: Style.space(40)
         height: width
         radius: width / 2
         color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.1)
@@ -447,7 +407,7 @@ Item {
       }
 
       Rectangle {
-        width: Style.space(36)
+        width: Style.space(40)
         height: width
         radius: width / 2
         color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
@@ -468,7 +428,7 @@ Item {
       }
 
       Rectangle {
-        width: Style.space(36)
+        width: Style.space(40)
         height: width
         radius: width / 2
         color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.1)
@@ -489,28 +449,30 @@ Item {
       }
     }
 
-    // Volume strip: [low icon] [slider] [high icon]
+    // 5. Volume strip: [low icon] [slider] [high icon]
+    // Volume is 90% width of seek bar (centered via extra padding)
     Row {
-      width: parent.width
-      spacing: Style.space(8)
+      width: parent.width * 0.9
+      anchors.horizontalCenter: parent.horizontalCenter
+      spacing: Style.space(6)
 
       Text {
         text: "󰕾"
         color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.6)
         font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.icon
+        font.pixelSize: Style.font.body
         anchors.verticalCenter: parent.verticalCenter
       }
 
       Item {
-        width: parent.width - Style.space(70)
-        height: Style.space(20)
+        width: parent.width - Style.space(36)
+        height: Style.space(16)
         anchors.verticalCenter: parent.verticalCenter
 
         Rectangle {
           anchors.centerIn: parent
           width: parent.width
-          height: Style.space(8)
+          height: Style.space(6)
           radius: height / 2
           color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
 
@@ -542,7 +504,7 @@ Item {
         text: "󰕾"
         color: root.panel ? root.panel.fg : Color.foreground
         font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.icon
+        font.pixelSize: Style.font.body
         anchors.verticalCenter: parent.verticalCenter
       }
     }
