@@ -1,6 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
+import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 import qs.Commons
@@ -78,6 +80,88 @@ Item {
       }
     }
     return list
+  }
+
+  // ─── Per-player stream volume ──────────────────────────────
+
+  property string playerSinkInputId: ""
+  property real playerStreamVolume: 0.5
+
+  function findPlayerSinkInput(raw) {
+    if (!raw || raw.length === 0 || !root.player) return
+
+    var lines = raw.split("\n")
+    var currentId = ""
+    var currentAppName = ""
+    var playerName = root.player.identity || root.player.appName || ""
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim()
+
+      if (line.indexOf("Sink Input #") === 0) {
+        if (currentId && currentAppName &&
+            currentAppName.toLowerCase() === playerName.toLowerCase()) {
+          root.playerSinkInputId = currentId
+          return
+        }
+        var idStr = line.replace("Sink Input #", "").trim()
+        if (/^\d+$/.test(idStr)) {
+          currentId = idStr
+        } else {
+          currentId = ""
+        }
+        currentAppName = ""
+      }
+
+      var appMatch = line.match(/application\.name\s*=\s*"(.+)"/)
+      if (appMatch) {
+        currentAppName = appMatch[1]
+      }
+
+      // Volume line for this sink-input
+      var volMatch = line.match(/Volume:\s*front-left:\s*\d+\s*\/\s*(\d+)%/)
+      if (volMatch && currentId && currentAppName &&
+          currentAppName.toLowerCase() === playerName.toLowerCase()) {
+        root.playerStreamVolume = parseInt(volMatch[1]) / 100.0
+      }
+    }
+
+    if (currentId && currentAppName &&
+        currentAppName.toLowerCase() === playerName.toLowerCase()) {
+      root.playerSinkInputId = currentId
+    }
+  }
+
+  function setPlayerStreamVolume(v) {
+    if (!root.playerSinkInputId) return
+    var clamped = Math.max(0, Math.min(1, v))
+    var pct = Math.round(clamped * 100)
+    setStreamVolProc.command = ["pactl", "set-sink-input-volume", root.playerSinkInputId, pct + "%"]
+    setStreamVolProc.running = true
+    root.playerStreamVolume = clamped
+  }
+
+  Process {
+    id: findSinkInputProc
+    command: ["pactl", "list", "sink-inputs"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.findPlayerSinkInput(text)
+    }
+  }
+
+  Process {
+    id: setStreamVolProc
+  }
+
+  Timer {
+    interval: 2000
+    running: root.player !== null
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: {
+      if (!findSinkInputProc.running) findSinkInputProc.running = true
+    }
   }
 
   // ─── Helpers ───────────────────────────────────────────────
@@ -405,13 +489,13 @@ Item {
       }
     }
 
-    // Volume Level Control
+    // Volume Level Control (per-player stream)
     Column {
       width: parent.width
       spacing: Style.space(4)
 
       Text {
-        text: "VOLUME"
+        text: "STREAM VOLUME"
         color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
         font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.caption
@@ -445,7 +529,7 @@ Item {
             color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
 
             Rectangle {
-              width: Math.max(0, Math.min(parent.width, parent.width * root.sinkVolume))
+              width: Math.max(0, Math.min(parent.width, parent.width * root.playerStreamVolume))
               height: parent.height
               radius: height / 2
               color: root.panel ? root.panel.fg : Color.foreground
@@ -456,22 +540,20 @@ Item {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: function(mouse) {
-              if (root.defaultSink && root.defaultSink.audio) {
-                var v = Math.max(0, Math.min(1, mouse.x / width))
-                root.defaultSink.audio.volume = v
-              }
+              var v = Math.max(0, Math.min(1, mouse.x / width))
+              root.setPlayerStreamVolume(v)
             }
             onPositionChanged: function(mouse) {
-              if (pressed && root.defaultSink && root.defaultSink.audio) {
+              if (pressed) {
                 var v = Math.max(0, Math.min(1, mouse.x / width))
-                root.defaultSink.audio.volume = v
+                root.setPlayerStreamVolume(v)
               }
             }
           }
         }
 
         Text {
-          text: Math.round(root.sinkVolume * 100) + "%"
+          text: Math.round(root.playerStreamVolume * 100) + "%"
           color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.7)
           font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
           font.pixelSize: Style.font.caption
