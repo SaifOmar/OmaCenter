@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Mpris
 import qs.Commons
 import qs.Ui
 
@@ -14,14 +15,45 @@ Item {
 
   implicitHeight: contentColumn.implicitHeight
 
-  readonly property var activePlayer: panel ? panel.activeMprisPlayer : null
+  // Auto-detect active MPRIS player (fallback when panel.activeMprisPlayer is not set)
+  readonly property var mprisPlayers: Mpris.players ? Mpris.players.values : []
+
+  readonly property var autoPlayer: {
+    var players = root.mprisPlayers
+    var playingPlayer = null
+    var fallbackPlayer = null
+
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i]
+      if (!p) continue
+      if (p.trackTitle || p.trackArtist) {
+        if (!fallbackPlayer) fallbackPlayer = p
+        if (p.isPlaying) {
+          playingPlayer = p
+          break
+        }
+      }
+    }
+
+    if (playingPlayer) return playingPlayer
+    return fallbackPlayer
+  }
+
+  readonly property var activePlayer: (panel ? panel.activeMprisPlayer : null) || root.autoPlayer
   readonly property string playerName: activePlayer ? (activePlayer.identity || activePlayer.appName || "Unknown") : ""
 
   property string currentSinkInputId: ""
   property string currentSinkName: ""
 
-  // Device list from pactl: [{name, description}]
+  // Device list from pactl: [{id, name, description}]
   property var devices: []
+
+  function deviceNameForId(id) {
+    for (var i = 0; i < devices.length; i++) {
+      if (devices[i].id === id) return devices[i].name
+    }
+    return ""
+  }
 
   function parseSinkInputs(raw) {
     if (!raw || raw.length === 0) return
@@ -29,7 +61,7 @@ Item {
     var lines = raw.split("\n")
     var id = ""
     var appName = ""
-    var sinkName = ""
+    var sinkId = ""
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim()
@@ -38,18 +70,18 @@ Item {
         if (id && appName && root.playerName &&
             appName.toLowerCase() === root.playerName.toLowerCase()) {
           root.currentSinkInputId = id
-          root.currentSinkName = sinkName
+          root.currentSinkName = root.deviceNameForId(sinkId)
           return
         }
         var idStr = line.replace("Sink Input #", "").trim()
         id = /^\d+$/.test(idStr) ? idStr : ""
         appName = ""
-        sinkName = ""
+        sinkId = ""
       }
 
-      var nameMatch = line.match(/^Name:\s*(.+)/)
-      if (nameMatch && id) {
-        sinkName = nameMatch[1].trim()
+      var sinkMatch = line.match(/^Sink:\s*(\d+)/)
+      if (sinkMatch && id) {
+        sinkId = sinkMatch[1]
       }
 
       var appMatch = line.match(/application\.name\s*=\s*"(.+)"/)
@@ -61,7 +93,7 @@ Item {
     if (id && appName && root.playerName &&
         appName.toLowerCase() === root.playerName.toLowerCase()) {
       root.currentSinkInputId = id
-      root.currentSinkName = sinkName
+      root.currentSinkName = root.deviceNameForId(sinkId)
     }
   }
 
@@ -69,12 +101,42 @@ Item {
     if (!raw || raw.length === 0) return
     var lines = raw.split("\n")
     var list = []
+    var currentId = ""
+    var currentName = ""
+    var currentDesc = ""
+
+    function flush() {
+      if (currentId && currentName) {
+        list.push({ id: currentId, name: currentName, description: currentDesc || currentName })
+      }
+      currentId = ""
+      currentName = ""
+      currentDesc = ""
+    }
+
     for (var i = 0; i < lines.length; i++) {
-      var parts = lines[i].trim().split(/\s{2,}/)
-      if (parts.length >= 2) {
-        list.push({ name: parts[0], description: parts[1] || parts[0] })
+      var line = lines[i].trim()
+
+      var sinkMatch = line.match(/^Sink #(\d+)/)
+      if (sinkMatch) {
+        flush()
+        currentId = sinkMatch[1]
+        continue
+      }
+
+      var nameMatch = line.match(/^Name:\s*(.+)/)
+      if (nameMatch && currentId) {
+        currentName = nameMatch[1].trim()
+        continue
+      }
+
+      var descMatch = line.match(/^Description:\s*(.+)/)
+      if (descMatch && currentId) {
+        currentDesc = descMatch[1].trim()
+        continue
       }
     }
+    flush()
     root.devices = list
   }
 
@@ -95,7 +157,7 @@ Item {
 
   Process {
     id: listSinksProc
-    command: ["pactl", "list", "sinks", "short"]
+    command: ["pactl", "list", "sinks"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.parseSinksList(text)
@@ -106,7 +168,7 @@ Item {
     id: moveSinkInputProc
     stdout: StdioCollector {
       waitForEnd: true
-      onFinished: listSinkInputsProc.running = true
+      onStreamFinished: listSinkInputsProc.running = true
     }
   }
 

@@ -24,7 +24,7 @@ Item {
   }
 
   implicitHeight: isExpanded
-    ? expandedColumn.implicitHeight
+    ? expandedColumn.height
     : (collapsedLoader.item ? collapsedLoader.item.implicitHeight : 0)
   height: implicitHeight
 
@@ -51,10 +51,12 @@ Item {
     anchors.right: parent.right
     anchors.top: parent.top
     spacing: Style.space(10)
+    height: Math.max(headerRow.implicitHeight + expandedLoader.height + spacing, 0)
     visible: host.isExpanded
 
     // Back button header
     Row {
+      id: headerRow
       width: parent.width
       spacing: Style.space(8)
       z: 5
@@ -90,6 +92,7 @@ Item {
     Loader {
       id: expandedLoader
       width: parent.width
+      height: item ? item.implicitHeight : 0
       source: _resolvedExpandedSource
 
       onLoaded: {
