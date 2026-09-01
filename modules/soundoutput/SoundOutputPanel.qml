@@ -45,8 +45,11 @@ Item {
   property string currentSinkInputId: ""
   property string currentSinkName: ""
 
-  // Device list from pactl: [{id, name, description}]
+  // Device list from pactl: [{id, name, description, volume, mute}]
   property var devices: []
+  // Current sink volume/mute (from selected device)
+  property real currentVolume: 0
+  property bool currentMuted: false
 
   function deviceNameForId(id) {
     for (var i = 0; i < devices.length; i++) {
@@ -104,14 +107,18 @@ Item {
     var currentId = ""
     var currentName = ""
     var currentDesc = ""
+    var currentVol = 1.0
+    var currentMute = false
 
     function flush() {
       if (currentId && currentName) {
-        list.push({ id: currentId, name: currentName, description: currentDesc || currentName })
+        list.push({ id: currentId, name: currentName, description: currentDesc || currentName, volume: currentVol, mute: currentMute })
       }
       currentId = ""
       currentName = ""
       currentDesc = ""
+      currentVol = 1.0
+      currentMute = false
     }
 
     for (var i = 0; i < lines.length; i++) {
@@ -135,15 +142,58 @@ Item {
         currentDesc = descMatch[1].trim()
         continue
       }
+
+      var volMatch = line.match(/front-left:\s+(\d+)\s+\/\s+(\d+)%/)
+      if (volMatch && currentId) {
+        currentVol = parseInt(volMatch[2]) / 100
+        continue
+      }
+
+      var muteMatch = line.match(/^Mute:\s*(yes|no)/)
+      if (muteMatch && currentId) {
+        currentMute = muteMatch[1] === "yes"
+        continue
+      }
     }
     flush()
+
     root.devices = list
+
+    // Update current sink volume from selected device
+    for (var j = 0; j < list.length; j++) {
+      if (list[j].name === root.currentSinkName) {
+        root.currentVolume = list[j].volume
+        root.currentMuted = list[j].mute
+        return
+      }
+    }
+    // Fallback: use first device
+    if (list.length > 0) {
+      root.currentVolume = list[0].volume
+      root.currentMuted = list[0].mute
+    }
   }
 
   function routeToSink(sinkName) {
     if (!sinkName || !root.currentSinkInputId) return
+    root.currentSinkName = sinkName
     moveSinkInputProc.command = ["pactl", "move-sink-input", root.currentSinkInputId, sinkName]
     moveSinkInputProc.running = true
+  }
+
+  function setSinkVolume(vol) {
+    if (!root.currentSinkName) return
+    var pct = Math.round(Math.max(0, Math.min(1, vol)) * 100)
+    setVolProc.command = ["pactl", "set-sink-volume", root.currentSinkName, pct + "%"]
+    setVolProc.running = true
+    root.currentVolume = vol
+  }
+
+  function toggleSinkMute() {
+    if (!root.currentSinkName) return
+    setMuteProc.command = ["pactl", "set-sink-mute", root.currentSinkName, "toggle"]
+    setMuteProc.running = true
+    root.currentMuted = !root.currentMuted
   }
 
   Process {
@@ -166,10 +216,17 @@ Item {
 
   Process {
     id: moveSinkInputProc
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: listSinkInputsProc.running = true
-    }
+    stdout: StdioCollector { waitForEnd: true }
+  }
+
+  Process {
+    id: setVolProc
+    stdout: StdioCollector { waitForEnd: true }
+  }
+
+  Process {
+    id: setMuteProc
+    stdout: StdioCollector { waitForEnd: true }
   }
 
   Timer {
@@ -216,6 +273,7 @@ Item {
       }
     }
 
+    // Header
     Row {
       width: parent.width
       spacing: Style.space(8)
@@ -229,19 +287,112 @@ Item {
 
         Text {
           anchors.centerIn: parent
-          text: "󰓃"
+          text: root.currentMuted ? "󰝟" : "󰕾"
           color: root.panel ? root.panel.fg : Color.foreground
           font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
           font.pixelSize: Style.font.body
         }
       }
 
-      Column {
+    // Volume Control
+    Column {
+      width: parent.width
+      spacing: Style.space(4)
+      visible: root.activePlayer !== null
+
+      Text {
+        text: "VOLUME"
+        color: Qt.darker(root.panel ? root.panel.fg : Color.foreground, 1.4)
+        font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        font.letterSpacing: 1.2
+      }
+
+      Row {
+        width: parent.width
+        spacing: Style.space(8)
+
+        Rectangle {
+          width: Style.space(24)
+          height: width
+          radius: width / 2
+          color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.1)
+          anchors.verticalCenter: parent.verticalCenter
+
+          Text {
+            anchors.centerIn: parent
+            text: root.currentMuted ? "󰝟" : "󰕾"
+            color: root.currentMuted
+              ? Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.4)
+              : (root.panel ? root.panel.fg : Color.foreground)
+            font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.body
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.toggleSinkMute()
+          }
+        }
+
+        Item {
+          id: volumeTrack
+          width: parent.width - Style.space(70)
+          height: Style.space(20)
+          anchors.verticalCenter: parent.verticalCenter
+
+          Rectangle {
+            anchors.centerIn: parent
+            width: parent.width
+            height: Style.space(8)
+            radius: height / 2
+            color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
+
+            Rectangle {
+              width: root.currentMuted ? 0 : Math.max(0, Math.min(parent.width, parent.width * root.currentVolume))
+              height: parent.height
+              radius: height / 2
+              color: root.panel ? root.panel.fg : Color.foreground
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: function(mouse) {
+              var v = Math.max(0, Math.min(1, mouse.x / width))
+              root.setSinkVolume(v)
+            }
+            onPositionChanged: function(mouse) {
+              if (pressed) {
+                var v = Math.max(0, Math.min(1, mouse.x / width))
+                root.setSinkVolume(v)
+              }
+            }
+          }
+        }
+
+        Text {
+          text: root.currentMuted ? "Muted" : Math.round(root.currentVolume * 100) + "%"
+          color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.7)
+          font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.caption
+          font.bold: true
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(32)
+          horizontalAlignment: Text.AlignRight
+        }
+      }
+    }
+
+    Column {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(1)
 
         Text {
-          text: "Route Audio"
+          text: "Sound Output"
           color: root.panel ? root.panel.fg : Color.foreground
           font.family: root.panel && root.panel.bar ? root.panel.bar.fontFamily : Style.font.family
           font.pixelSize: Style.font.body
@@ -336,7 +487,11 @@ Item {
             hoverEnabled: true
             onEntered: deviceRow.isHovered = true
             onExited: deviceRow.isHovered = false
-            onClicked: root.routeToSink(modelData.name)
+            onClicked: {
+              root.routeToSink(modelData.name)
+              root.currentVolume = modelData.volume
+              root.currentMuted = modelData.mute
+            }
           }
         }
       }
