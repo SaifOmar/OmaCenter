@@ -11,6 +11,8 @@ OmaCenter is a modular Omarchy shell control center. It presents common system c
 
 Some features depend on the corresponding system service or utility being installed and available (for example, NetworkManager, Bluetooth, Tailscale, PipeWire, or UPower).
 
+![OmaCenter panel open, showing connection and DnD tiles, media controls, battery, screenshot, theme, display, night light, and sound sliders](assets/preview.png)
+
 ## Install
 
 OmaCenter requires Omarchy and its Quickshell-based shell. Once this repository is published, install it with Omarchy's plugin manager, replacing the URL with this repository's GitHub clone URL:
