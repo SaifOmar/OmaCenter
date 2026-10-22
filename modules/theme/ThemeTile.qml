@@ -12,20 +12,53 @@ CursorSurface {
   readonly property string moduleId: "so.omacenter.theme"
 
   property string currentTheme: "Omarchy"
+  property string pendingThemeName: ""
 
   function updateTheme(raw) {
     var t = raw.trim()
     if (t) root.currentTheme = t
   }
 
+  function applyThemeChoice(raw) {
+    var choice = raw.trim()
+    if (!choice) return
+    // Extract theme name from path: /path/to/Theme.qml -> Theme
+    var baseName = choice.split("/").pop()
+    var themeName = baseName.split(".")[0]
+    if (themeName) {
+      root.pendingThemeName = themeName
+      setThemeProc.running = true
+    }
+  }
+
   // Background process to check active theme name
   Process {
     id: themeProc
-    command: ["sh", "-c", "cat ~/.local/state/omarchy/current/theme.name 2>/dev/null || echo 'Omarchy'"]
+    command: ["cat", Quickshell.env("HOME") + "/.local/state/omarchy/current/theme.name"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.updateTheme(text)
+      onStreamFinished: {
+        var result = text.trim()
+        root.updateTheme(result || "Omarchy")
+      }
     }
+  }
+
+  // Get theme choice from switcher
+  Process {
+    id: getThemeChoiceProc
+    command: ["omarchy-theme-switcher"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyThemeChoice(text)
+    }
+  }
+
+  // Set the selected theme
+  Process {
+    id: setThemeProc
+    command: ["omarchy-theme-set", root.pendingThemeName]
+    stdout: StdioCollector { waitForEnd: true }
   }
 
   Timer {
@@ -55,7 +88,7 @@ CursorSurface {
       if (root.panel && typeof root.panel.close === "function") {
         root.panel.close()
       }
-      Quickshell.execDetached(["sh", "-c", "choice=$(omarchy-theme-switcher); [[ -n \"$choice\" ]] && omarchy-theme-set \"$(basename \"$choice\" | cut -d. -f1)\""])
+      getThemeChoiceProc.running = true
     }
   }
 

@@ -39,8 +39,8 @@ Item {
 
   function setMode(modeStr) {
     root.activeMode = modeStr
-    var cmd = "hyprctl eval 'hl.monitor({ output = \"" + root.monitorName + "\", mode = \"" + modeStr + "\", position = \"auto\", scale = " + root.currentScale.toString() + " })'"
-    Quickshell.execDetached(["sh", "-c", cmd])
+    var hyprExpr = "hl.monitor({ output = \"" + root.monitorName + "\", mode = \"" + modeStr + "\", position = \"auto\", scale = " + root.currentScale.toString() + " })"
+    Quickshell.execDetached(["hyprctl", "eval", hyprExpr])
     monTimer.restart()
   }
 
@@ -68,14 +68,18 @@ Item {
           root.availableModes = m.availableModes
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("OmaCenter: failed to parse monitor data:", e.message)
+    }
   }
 
   function parseBrightness(raw) {
     try {
       var val = parseFloat(raw.trim())
       if (!isNaN(val)) root.percent = val > 1.0 ? Math.min(1.0, val / 100.0) : val
-    } catch (e) {}
+    } catch (e) {
+      console.warn("OmaCenter: failed to parse brightness:", e.message)
+    }
   }
 
   function parseNightlight(raw) {
@@ -83,7 +87,9 @@ Item {
       var d = JSON.parse(raw)
       root.nightlightEnabled = d.enabled === true
       if (d.temperature && d.temperature > 0) root.temperatureK = d.temperature
-    } catch (e) {}
+    } catch (e) {
+      console.warn("OmaCenter: failed to parse nightlight status:", e.message)
+    }
   }
 
   Process {

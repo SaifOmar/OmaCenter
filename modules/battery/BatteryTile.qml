@@ -39,16 +39,25 @@ CursorSurface {
         var status = lines[1].trim().toLowerCase()
         root.isCharging = status === "charging"
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("OmaCenter: failed to parse battery status:", e.message)
+    }
   }
 
   function updateProfile(raw) {
-    var prof = raw.trim().toLowerCase()
-    if (prof) root.activeProfile = prof
+    var lines = String(raw || "").split("\n")
+    for (var i = 0; i < lines.length; i++) {
+      var parts = lines[i].trim().split("\t")
+      if (parts.length > 1 && parts[1] === "1") {
+        root.activeProfile = parts[0]
+        return
+      }
+    }
   }
 
   Process {
     id: battProc
+    // sh -c needed for glob expansion (BAT*) and fallback — command is hardcoded, no user input
     command: ["sh", "-c", "cat /sys/class/power_supply/BAT*/capacity /sys/class/power_supply/BAT*/status 2>/dev/null || echo '100\\nDischarging'"]
     stdout: StdioCollector {
       waitForEnd: true
@@ -58,7 +67,7 @@ CursorSurface {
 
   Process {
     id: profProc
-    command: ["powerprofilesctl", "get"]
+    command: ["omarchy-powerprofiles-list", "--active-state"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.updateProfile(text)

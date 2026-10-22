@@ -71,7 +71,20 @@ Item {
     // ─── Per-player stream volume ──────────────────────────────
 
     property string playerSinkInputId: ""
-    property real playerStreamVolume: 0.5
+    property real playerStreamVolume: 0
+    property bool playerStreamVolumeKnown: false
+    property string volumePlayerKey: ""
+
+    readonly property string currentPlayerKey: player
+        ? (player.identity || player.appName || player.desktopEntry || "")
+        : ""
+
+    onCurrentPlayerKeyChanged: {
+        playerSinkInputId = "";
+        playerStreamVolumeKnown = false;
+        if (currentPlayerKey && !findSinkInputProc.running)
+            findSinkInputProc.running = true;
+    }
 
     function findPlayerSinkInput(raw) {
         if (!raw || raw.length === 0 || !root.player)
@@ -79,16 +92,37 @@ Item {
         var lines = raw.split("\n");
         var currentId = "";
         var currentAppName = "";
-        var playerName = root.player.identity || root.player.appName || "";
+        var currentProcessBinary = "";
+        var playerNames = [root.player.identity, root.player.appName, root.player.desktopEntry];
+        var foundId = "";
+        var foundVolume = -1;
+        var matchedVolume = -1;
+
+        function isTargetPlayer() {
+            var names = playerNames;
+            var candidates = [currentAppName, currentProcessBinary];
+            for (var n = 0; n < names.length; n++) {
+                if (!names[n]) continue;
+                var expected = String(names[n]).toLowerCase().replace(/\.desktop$/, "");
+                for (var c = 0; c < candidates.length; c++) {
+                    if (candidates[c] && String(candidates[c]).toLowerCase().replace(/\.desktop$/, "") === expected)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        function finishSinkInput() {
+            if (!currentId || !isTargetPlayer()) return;
+            foundId = currentId;
+            matchedVolume = foundVolume;
+        }
 
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i].trim();
 
             if (line.indexOf("Sink Input #") === 0) {
-                if (currentId && currentAppName && currentAppName.toLowerCase() === playerName.toLowerCase()) {
-                    root.playerSinkInputId = currentId;
-                    return;
-                }
+                finishSinkInput();
                 var idStr = line.replace("Sink Input #", "").trim();
                 if (/^\d+$/.test(idStr)) {
                     currentId = idStr;
@@ -96,6 +130,8 @@ Item {
                     currentId = "";
                 }
                 currentAppName = "";
+                currentProcessBinary = "";
+                foundVolume = -1;
             }
 
             var appMatch = line.match(/application\.name\s*=\s*"(.+)"/);
@@ -103,25 +139,33 @@ Item {
                 currentAppName = appMatch[1];
             }
 
-            var volMatch = line.match(/Volume:\s*front-left:\s*\d+\s*\/\s*(\d+)%/);
-            if (volMatch && currentId && currentAppName && currentAppName.toLowerCase() === playerName.toLowerCase()) {
-                root.playerStreamVolume = parseInt(volMatch[1]) / 100.0;
-            }
+            var processMatch = line.match(/application\.process\.binary\s*=\s*"([^"]+)"/);
+            if (processMatch)
+                currentProcessBinary = processMatch[1];
+
+            var volMatch = line.match(/Volume:.*?\/\s*([\d.]+)%/);
+            if (volMatch)
+                foundVolume = parseFloat(volMatch[1]) / 100.0;
         }
 
-        if (currentId && currentAppName && currentAppName.toLowerCase() === playerName.toLowerCase()) {
-            root.playerSinkInputId = currentId;
-        }
+        finishSinkInput();
+        root.playerSinkInputId = foundId;
+        root.volumePlayerKey = root.currentPlayerKey;
+        root.playerStreamVolumeKnown = foundId !== "" && matchedVolume >= 0;
+        if (root.playerStreamVolumeKnown)
+            root.playerStreamVolume = matchedVolume;
     }
 
     function setPlayerStreamVolume(v) {
-        if (!root.playerSinkInputId)
+        if (!root.playerSinkInputId || root.volumePlayerKey !== root.currentPlayerKey)
             return;
         var clamped = Math.max(0, Math.min(1, v));
         var pct = Math.round(clamped * 100);
         setStreamVolProc.command = ["pactl", "set-sink-input-volume", root.playerSinkInputId, pct + "%"];
         setStreamVolProc.running = true;
         root.playerStreamVolume = clamped;
+        root.playerStreamVolumeKnown = true;
+        root.volumePlayerKey = root.currentPlayerKey;
     }
 
     Process {
@@ -552,7 +596,9 @@ Item {
                     color: Util.alpha(root.panel ? root.panel.fg : Color.foreground, 0.13)
 
                     Rectangle {
-                        width: Math.max(0, Math.min(parent.width, parent.width * root.playerStreamVolume))
+                        width: root.playerStreamVolumeKnown
+                            ? Math.max(0, Math.min(parent.width, parent.width * root.playerStreamVolume))
+                            : 0
                         height: parent.height
                         radius: height / 2
                         color: root.panel ? root.panel.fg : Color.foreground

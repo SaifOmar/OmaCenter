@@ -27,7 +27,9 @@ CursorSurface {
       if (!isNaN(val)) {
         root.percent = val > 1.0 ? Math.min(1.0, val / 100.0) : val
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("OmaCenter: failed to parse brightness:", e.message)
+    }
   }
 
   Process {

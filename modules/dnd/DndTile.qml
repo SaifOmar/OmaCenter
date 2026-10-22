@@ -12,33 +12,48 @@ CursorSurface {
   readonly property string moduleId: "so.omacenter.dnd"
 
   property bool dndEnabled: false
+  property int dndRevision: 0
+  property int statusRequestRevision: 0
   readonly property var notificationService: panel && panel.bar && panel.bar.shell
     ? panel.bar.shell.firstPartyServiceFor("omarchy.notifications")
     : null
 
   function toggleDnd() {
-    // Optimistic UI state toggle for zero-delay feedback
     root.dndEnabled = !root.dndEnabled
-
+    root.dndRevision++
     if (root.notificationService && typeof root.notificationService.setDoNotDisturb === "function") {
       root.notificationService.setDoNotDisturb(root.dndEnabled)
     } else {
       Quickshell.execDetached(["omarchy-toggle-notification-silencing"])
-      refreshTimer.restart()
     }
+    refreshTimer.restart()
   }
 
   function updateStatus(raw) {
     var txt = raw.trim()
-    root.dndEnabled = txt === "true" || txt === "on" || txt === "1"
+    if (root.statusRequestRevision !== root.dndRevision)
+      return
+    if (["true", "on", "1"].indexOf(txt.toLowerCase()) >= 0)
+      root.dndEnabled = true
+    else if (["false", "off", "0"].indexOf(txt.toLowerCase()) >= 0)
+      root.dndEnabled = false
+  }
+
+  function refreshStatus() {
+    if (!root.notificationService && !statusProc.running) {
+      statusRequestRevision = dndRevision
+      statusProc.running = true
+    }
   }
 
   Process {
     id: statusProc
-    command: ["sh", "-c", "omarchy-shell notifications dnd 2>/dev/null || echo false"]
+    command: ["omarchy-shell", "notifications", "dnd"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.updateStatus(text)
+      onStreamFinished: {
+        root.updateStatus(text)
+      }
     }
   }
 
@@ -46,23 +61,28 @@ CursorSurface {
     id: refreshTimer
     interval: 300
     repeat: false
-    onTriggered: {
-      if (!statusProc.running) statusProc.running = true
-    }
+    onTriggered: root.refreshStatus()
   }
 
   Timer {
-    interval: 4000
+    interval: 1000
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: {
-      if (root.notificationService && root.notificationService.doNotDisturb !== undefined) {
+    onTriggered: root.refreshStatus()
+  }
+
+  Connections {
+    target: root.notificationService
+    function onDoNotDisturbChanged() {
+      if (root.notificationService)
         root.dndEnabled = root.notificationService.doNotDisturb
-      } else if (!statusProc.running) {
-        statusProc.running = true
-      }
     }
+  }
+
+  Component.onCompleted: {
+    if (root.notificationService && root.notificationService.doNotDisturb !== undefined)
+      root.dndEnabled = root.notificationService.doNotDisturb
   }
 
   hasCursor: false
